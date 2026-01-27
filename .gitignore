@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+__pycache__/
+*.pyc
+
+.env
+.env.local
+.env.*
+
+k8s/secrets/*.yaml
+
+!k8s/secrets/*.example.yaml

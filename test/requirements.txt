@@ -1,0 +1,5 @@
+flask
+flask-cors
+chromadb
+wandb
+requests
