@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
       - name: flask-backend
-        image: my-flask-app:v1 
-        imagePullPolicy: Never 
+        image: cdquang/my-app:flask-api-latest
+        imagePullPolicy: Always 
         resources:
           requests:
             cpu: "250m"
@@ -37,6 +37,11 @@ spec:
             secretKeyRef:
               name: wandb-secret
               key: api-key
+        # register to Eureka discovery-server
+        - name: EUREKA_SERVER_URL
+          value: "http://discovery-server:8761"
+        - name: EUREKA_APP_NAME
+          value: "FLASK-SERVICE"
 ---
 apiVersion: v1
 kind: Service
