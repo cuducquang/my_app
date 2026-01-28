@@ -36,6 +36,16 @@ func getenv(key, def string) string {
 }
 
 func localIP() string {
+	// Prefer POD_IP from k8s downward API, then HOSTNAME, then auto-detect
+	if podIP := strings.TrimSpace(os.Getenv("POD_IP")); podIP != "" {
+		return podIP
+	}
+	if hostname := strings.TrimSpace(os.Getenv("HOSTNAME")); hostname != "" {
+		// In k8s, HOSTNAME is often the pod name, but try to resolve it
+		if ip := net.ParseIP(hostname); ip != nil {
+			return ip.String()
+		}
+	}
 	// Best-effort: pick first non-loopback IPv4.
 	ifaces, err := net.Interfaces()
 	if err != nil {

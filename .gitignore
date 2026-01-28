@@ -10,3 +10,4 @@ __pycache__/
 k8s/secrets/*.yaml
 
 !k8s/secrets/*.example.yaml
+api-gateway/api-gateway.exe
