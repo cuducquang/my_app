@@ -293,7 +293,58 @@ kubectl port-forward service/flask-service 5000:80
 
 ---
 
-## 🧪 Testing the API
+## 🧪 Local Testing (Before Commit)
+
+**Important**: Always test services locally before committing to avoid breaking deployments.
+
+### Recommended: Docker Compose (Mimics Production)
+
+```bash
+# Build and start all services
+docker-compose -f docker-compose.local.yml up --build
+
+# Test endpoints
+curl http://localhost:8080/health
+curl http://localhost:8080/flask
+
+# View Eureka dashboard
+# Open: http://localhost:8761
+
+# Stop services
+docker-compose -f docker-compose.local.yml down
+```
+
+**Why Docker Compose?**
+- ✅ Uses same Dockerfiles as production
+- ✅ Mimics Kubernetes environment
+- ✅ Isolated and reproducible
+- ✅ Fast to start/stop
+
+### Alternative: Run Services Natively
+**Quick Start (Native)**:
+
+```bash
+# Terminal 1: Start Eureka
+cd discovery-server
+mvn spring-boot:run
+
+# Terminal 2: Start Flask
+cd test
+export EUREKA_SERVER_URL=http://localhost:8761
+python app.py
+
+# Terminal 3: Start API Gateway
+cd api-gateway
+export EUREKA_SERVER_URL=http://localhost:8761/eureka
+export FLASK_BASE_URL=http://localhost:5000
+go run main.go
+
+# Test: http://localhost:8080/health
+```
+
+---
+
+## 🧪 Testing the API (In Kubernetes)
 
 Once services are running and port-forwarded:
 

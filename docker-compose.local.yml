@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # Discovery Server (Eureka)
+  discovery-server:
+    build:
+      context: ./discovery-server
+      dockerfile: Dockerfile
+    container_name: discovery-server-local
+    ports:
+      - "8761:8761"
+    environment:
+      - PORT=8761
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8761"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mlops-network
+
+  # Flask Backend Service
+  flask-service:
+    build:
+      context: ./test
+      dockerfile: Dockerfile
+    container_name: flask-service-local
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - EUREKA_SERVER_URL=http://discovery-server:8761
+      - EUREKA_APP_NAME=FLASK-SERVICE
+      - PREFER_IP=true
+      # Infrastructure dependencies (optional for local testing)
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - WANDB_BASE_URL=http://wandb-service:80
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mlops-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway-local
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - APP_NAME=API-GATEWAY
+      - EUREKA_SERVER_URL=http://discovery-server:8761/eureka
+      - FLASK_APP_NAME=FLASK-SERVICE
+      - FLASK_BASE_URL=http://flask-service:5000
+      - PREFER_IP=true
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      flask-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mlops-network
+
+  # Optional: ChromaDB (if you want to test infrastructure endpoints)
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb-local
+    ports:
+      - "8000:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+    volumes:
+      - chromadb-data:/chroma/chroma
+    networks:
+      - mlops-network
+    profiles:
+      - infrastructure  # Only start with --profile infrastructure
+
+  # Optional: WandB (if you want to test infrastructure endpoints)
+  wandb-service:
+    image: wandb/local:latest
+    container_name: wandb-local
+    ports:
+      - "8081:8080"
+    environment:
+      - WANDB_BASE_URL=http://localhost:8081
+    networks:
+      - mlops-network
+    profiles:
+      - infrastructure  # Only start with --profile infrastructure
+
+networks:
+  mlops-network:
+    driver: bridge
+
+volumes:
+  chromadb-data:
+

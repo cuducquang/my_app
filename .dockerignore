@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+README.md
+LOCAL_TESTING.md
+
+# Scripts
+scripts/
+
+# Kubernetes
+k8s/
+*.yaml
+*.yml
+
+# CI/CD
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+*_test.py
+test_*.py
+
+# Logs
+*.log
+
