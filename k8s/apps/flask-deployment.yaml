@@ -30,14 +30,8 @@ spec:
           value: "chromadb-service"
         - name: CHROMA_PORT
           value: "8000"
-        - name: WANDB_BASE_URL
-          value: "http://wandb-service:80"
-        - name: WANDB_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: wandb-secret
-              key: api-key
-        # register to Eureka discovery-server
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow-service:80"
         - name: EUREKA_SERVER_URL
           value: "http://discovery-server:8761"
         - name: EUREKA_APP_NAME

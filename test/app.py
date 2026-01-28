@@ -3,7 +3,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flasgger import Swagger, swag_from
 import chromadb
-import wandb
+import mlflow
 import random
 import requests
 import socket
@@ -26,7 +26,7 @@ swagger = Swagger(app, template={
 
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
 CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
-WANDB_URL = os.getenv("WANDB_BASE_URL", "")
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
 EUREKA_SERVER_URL = os.getenv("EUREKA_SERVER_URL", "").rstrip("/")
 EUREKA_APP_NAME = os.getenv("EUREKA_APP_NAME", "FLASK-SERVICE")
 EUREKA_INSTANCE_ID = os.getenv("EUREKA_INSTANCE_ID", "")
@@ -186,31 +186,20 @@ def test_infra():
     except Exception as e:
         logs['chromadb'] = f"Error: {str(e)}"
 
-    # 2. Test WandB Connection
+    # 2. Test MLflow Connection
     try:
-        if WANDB_URL:
-            # Parse host/port from WANDB_URL for check
-            # Assumes format http://host:port
-            try:
-                from urllib.parse import urlparse
-                parsed = urlparse(WANDB_URL)
-                host = parsed.hostname
-                port = parsed.port or 80
-                
-                if _check_connection(host, port, timeout=3):
-                    run = wandb.init(project="k8s-local-test", name=f"api-test-{random.randint(1,1000)}", reinit=True)
-                    wandb.log({"accuracy": random.random(), "loss": random.random()})
-                    run.finish()
-                    logs['wandb'] = f"Success: Logged metrics to {WANDB_URL}"
-                else:
-                    logs['wandb'] = f"Failed: Could not connect to WandB at {host}:{port}"
-            except Exception as parse_err:
-                 logs['wandb'] = f"Error parsing WANDB_URL: {str(parse_err)}"
-        else:
-            logs['wandb'] = "Skipped: WANDB_BASE_URL not set."
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        mlflow.set_experiment("k8s-local-test")
+        
+        with mlflow.start_run(run_name=f"api-test-{random.randint(1,1000)}"):
+            mlflow.log_metric("accuracy", random.random())
+            mlflow.log_metric("loss", random.random())
+            mlflow.log_param("source", "flask-api")
+            
+        logs['mlflow'] = f"Success: Logged to {MLFLOW_TRACKING_URI}"
             
     except Exception as e:
-        logs['wandb'] = f"Error: {str(e)}"
+        logs['mlflow'] = f"Error: {str(e)}"
 
     return jsonify(logs)
 
