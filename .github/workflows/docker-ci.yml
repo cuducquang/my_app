@@ -4,12 +4,46 @@ on:
   push:
     branches:
       - main
+    paths:
+      # Trigger on changes to any service or shared files
+      - 'api-gateway/**'
+      - 'discovery-server/**'
+      - 'test/**'
+      - '.github/workflows/docker-ci.yml'
 
 env:
   DOCKER_REPO: cdquang/my-app
 
 jobs:
-  build-and-push:
+  # Detect which services have changed
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api-gateway: ${{ steps.filter.outputs.api-gateway }}
+      discovery-server: ${{ steps.filter.outputs.discovery-server }}
+      flask-api: ${{ steps.filter.outputs.flask-api }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for better diff detection
+
+      - name: Detect changed services
+        uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            api-gateway:
+              - 'api-gateway/**'
+            discovery-server:
+              - 'discovery-server/**'
+            flask-api:
+              - 'test/**'
+
+  # Build and push API Gateway
+  build-api-gateway:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.api-gateway == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,7 +61,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # api-gateway
       - name: Build and push api-gateway image
         uses: docker/build-push-action@v6
         with:
@@ -36,11 +69,30 @@ jobs:
           tags: |
             ${{ env.DOCKER_REPO }}:api-gateway-latest
             ${{ env.DOCKER_REPO }}:api-gateway-${{ github.sha }}
-
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # discovery-server
+  # Build and push Discovery Server
+  build-discovery-server:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.discovery-server == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push discovery-server image
         uses: docker/build-push-action@v6
         with:
@@ -49,11 +101,30 @@ jobs:
           tags: |
             ${{ env.DOCKER_REPO }}:discovery-server-latest
             ${{ env.DOCKER_REPO }}:discovery-server-${{ github.sha }}
-
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # flask (test)
+  # Build and push Flask API
+  build-flask-api:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.flask-api == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push flask-api image
         uses: docker/build-push-action@v6
         with:
@@ -62,7 +133,6 @@ jobs:
           tags: |
             ${{ env.DOCKER_REPO }}:flask-api-latest
             ${{ env.DOCKER_REPO }}:flask-api-${{ github.sha }}
-
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
