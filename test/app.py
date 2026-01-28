@@ -13,6 +13,30 @@ import time
 app = Flask(__name__)
 CORS(app)
 
+# Global variables for caching
+chroma_client = None
+collection = None
+
+# --- PRE-LOAD CHROMA MODEL ---
+print("⏳ Initializing ChromaDB Client & Loading Models...")
+try:
+    if _check_connection(CHROMA_HOST, CHROMA_PORT, timeout=3):
+        chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=int(CHROMA_PORT))
+        
+        # Create/Get collection to trigger model loading
+        collection = chroma_client.get_or_create_collection(name="test_collection")
+        
+        # Trigger model load into RAM with a dummy query
+        collection.query(query_texts=["Hello world"], n_results=1)
+        
+        print("✅ Model loaded successfully! Ready to serve.")
+    else:
+        print(f"⚠️ Warning: Could not connect to ChromaDB at {CHROMA_HOST}:{CHROMA_PORT}")
+
+except Exception as e:
+    print(f"⚠️ Warning: Could not pre-load Chroma: {e}")
+
+
 # Initialize Swagger
 swagger = Swagger(app, template={
     "info": {
@@ -169,22 +193,33 @@ def test_infra():
     logs = {}
     
     # 1. Test ChromaDB Connection
+    logs = {}
+    
+    # 1. Test ChromaDB Connection
+    global collection, chroma_client
     try:
-        if _check_connection(CHROMA_HOST, CHROMA_PORT, timeout=3):
-            chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=int(CHROMA_PORT))
-            
-            collection = chroma_client.get_or_create_collection(name="test_collection")
-            
+        # Use cached collection if available, else try to re-init
+        if collection is None:
+             if _check_connection(CHROMA_HOST, CHROMA_PORT, timeout=3):
+                chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=int(CHROMA_PORT))
+                collection = chroma_client.get_or_create_collection(name="test_collection")
+             else:
+                logs['chromadb'] = f"Failed: Could not connect to {CHROMA_HOST}:{CHROMA_PORT}"
+        
+        if collection:
             collection.add(
                 documents=["This is a test document from Flask"],
                 metadatas=[{"source": "flask_api"}],
                 ids=[f"id_{random.randint(1, 1000)}"]
             )
-            logs['chromadb'] = f"Success: Connected to {CHROMA_HOST}:{CHROMA_PORT} and inserted vector data."
-        else:
-             logs['chromadb'] = f"Failed: Could not connect to {CHROMA_HOST}:{CHROMA_PORT} (Connection refused or timeout)"
+            logs['chromadb'] = f"Success: Connected to {CHROMA_HOST}:{CHROMA_PORT} and inserted vector data (Cached)."
+        elif 'chromadb' not in logs:
+             logs['chromadb'] = "Error: ChromaDB not initialized."
+             
     except Exception as e:
         logs['chromadb'] = f"Error: {str(e)}"
+        # Reset cache on error to force retry next time
+        collection = None
 
     # 2. Test MLflow Connection
     try:
