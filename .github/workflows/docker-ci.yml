@@ -24,6 +24,9 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       # api-gateway
       - name: Build and push api-gateway image
         uses: docker/build-push-action@v6
