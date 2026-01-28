@@ -11,7 +11,7 @@ import (
 )
 
 // setupHandlers registers all HTTP handlers
-func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, httpClient *http.Client) {
+func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, proxy *ProxyClient, httpClient *http.Client) {
 	// Root path - show service info
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -189,7 +189,7 @@ func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, httpCli
 			http.Error(w, "no flask base url (set FLASK_BASE_URL or register FLASK_APP_NAME in Eureka)", 500)
 			return
 		}
-		proxyJSON(w, r, httpClient, http.MethodGet, base+"/", nil)
+		proxy.ProxyJSON(w, r, http.MethodGet, base+"/", nil)
 	})
 
 	// Proxy: POST /flask/test-infrastructure -> Flask POST /test-infrastructure
@@ -213,6 +213,6 @@ func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, httpCli
 		if len(bytes.TrimSpace(body)) == 0 {
 			body = []byte(`{}`)
 		}
-		proxyJSON(w, r, httpClient, http.MethodPost, base+"/test-infrastructure", body)
+		proxy.ProxyJSON(w, r, http.MethodPost, base+"/test-infrastructure", body)
 	})
 }

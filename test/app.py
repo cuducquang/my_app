@@ -74,16 +74,20 @@ def _eureka_register():
   </dataCenterInfo>
 </instance>"""
 
-    try:
-        r = requests.post(register_url, data=xml, headers={"Content-Type": "application/xml"}, timeout=5)
-        if r.status_code >= 200 and r.status_code <= 299:
-            print(f"[eureka] registered {app_name} ({instance_id})")
-        else:
-            print(f"[eureka] register failed: {r.status_code} {r.text}")
-            return
-    except Exception as e:
-        print(f"[eureka] register error: {e}")
-        return
+    # Registration retry loop
+    while True:
+        try:
+            r = requests.post(register_url, data=xml, headers={"Content-Type": "application/xml"}, timeout=5)
+            if 200 <= r.status_code <= 299:
+                print(f"[eureka] registered {app_name} ({instance_id})")
+                break
+            else:
+                print(f"[eureka] register failed: {r.status_code} {r.text}")
+        except Exception as e:
+            print(f"[eureka] register error: {e}")
+        
+        print("[eureka] retrying registration in 5s...")
+        time.sleep(5)
 
     # heartbeat loop
     hb_url = f"{base}/apps/{app_name}/{instance_id}"
