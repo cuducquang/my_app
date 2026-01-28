@@ -68,23 +68,20 @@ func (p *ProxyClient) ProxyJSON(w http.ResponseWriter, r *http.Request, method, 
 		return resp, nil
 	})
 
-	// Handle Circuit Breaker specific errors
-	if err == gobreaker.ErrOpenState {
+	switch err {
+	case gobreaker.ErrOpenState:
 		http.Error(w, "Service Unavailable (Circuit Breaker Open)", http.StatusServiceUnavailable)
 		return
-	} else if err == gobreaker.ErrTooManyRequests {
+	case gobreaker.ErrTooManyRequests:
 		http.Error(w, "Service Unavailable (Circuit Breaker Half-Open Limit)", http.StatusServiceUnavailable)
 		return
 	}
 
-	// If result is nil but err is set (network error), handle it
 	if result == nil && err != nil {
 		http.Error(w, fmt.Sprintf("Upstream failed: %v", err), http.StatusBadGateway)
 		return
 	}
 
-	// If we got here, result is either a success response or a 5xx response (wrapped in error above)
-	// We need to unwrap if it was returned as result
 	resp, ok := result.(*http.Response)
 	if !ok {
 		// Should not happen if logic matches above
@@ -93,8 +90,17 @@ func (p *ProxyClient) ProxyJSON(w http.ResponseWriter, r *http.Request, method, 
 	}
 	defer resp.Body.Close()
 
-	// Forward response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+// State returns the current state of the circuit breaker
+func (p *ProxyClient) State() gobreaker.State {
+	return p.cb.State()
+}
+
+// Counts returns the current execution counts
+func (p *ProxyClient) Counts() gobreaker.Counts {
+	return p.cb.Counts()
 }

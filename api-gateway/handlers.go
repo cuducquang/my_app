@@ -24,15 +24,33 @@ func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, proxy *
 			"version": "1.0.0",
 			"status":  "running",
 			"endpoints": map[string]string{
-				"health":     "/health",
-				"swagger-ui": "/swagger-ui",
-				"openapi":    "/openapi.json",
-				"aggregate":  "/api-docs/aggregate",
-				"flask":      "/flask",
-				"flask-test": "/flask/test-infrastructure",
+				"health":          "/health",
+				"swagger-ui":      "/swagger-ui",
+				"openapi":         "/openapi.json",
+				"aggregate":       "/api-docs/aggregate",
+				"flask":           "/flask",
+				"flask-test":      "/flask/test-infrastructure",
+				"circuit-breaker": "/admin/circuit-breaker",
 			},
 		}
 		json.NewEncoder(w).Encode(info)
+	})
+
+	// Circuit Breaker Status
+	mux.HandleFunc("/admin/circuit-breaker", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		counts := proxy.Counts()
+		status := map[string]interface{}{
+			"state": proxy.State().String(),
+			"counts": map[string]interface{}{
+				"requests":              counts.Requests,
+				"total_successes":       counts.TotalSuccesses,
+				"total_failures":        counts.TotalFailures,
+				"consecutive_successes": counts.ConsecutiveSuccesses,
+				"consecutive_failures":  counts.ConsecutiveFailures,
+			},
+		}
+		json.NewEncoder(w).Encode(status)
 	})
 
 	// Health check
