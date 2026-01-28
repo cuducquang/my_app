@@ -102,6 +102,23 @@ services:
     profiles:
       - infrastructure  # Only start with --profile infrastructure
 
+  # Frontend Service (Next.js)
+  front-end:
+    build:
+      context: ./front-end
+      dockerfile: Dockerfile
+    container_name: front-end-local
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - API_GATEWAY_URL=http://api-gateway:8080
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - mlops-network
+
 networks:
   mlops-network:
     driver: bridge
