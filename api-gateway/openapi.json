@@ -1,0 +1,159 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "API Gateway",
+    "description": "API Gateway for MLOps Platform - Routes requests to backend microservices",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://api-gateway",
+      "description": "Kubernetes service"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health check",
+        "description": "Check API Gateway health status",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/flask": {
+      "get": {
+        "tags": ["Flask Backend"],
+        "summary": "Get Flask service status",
+        "description": "Proxies request to Flask backend service",
+        "responses": {
+          "200": {
+            "description": "Flask service response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Flask service unavailable"
+          }
+        }
+      }
+    },
+    "/flask/test-infrastructure": {
+      "post": {
+        "tags": ["Flask Backend"],
+        "summary": "Test infrastructure connections",
+        "description": "Proxies POST request to Flask /test-infrastructure endpoint",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Infrastructure test results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "chromadb": {
+                      "type": "string"
+                    },
+                    "wandb": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed"
+          },
+          "502": {
+            "description": "Flask service unavailable"
+          }
+        }
+      }
+    },
+    "/api-docs/aggregate": {
+      "get": {
+        "tags": ["API Documentation"],
+        "summary": "Get aggregated OpenAPI specs",
+        "description": "Returns aggregated OpenAPI specifications from all registered services",
+        "responses": {
+          "200": {
+            "description": "Aggregated OpenAPI specs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "spec": {
+                            "type": "object"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/swagger-ui": {
+      "get": {
+        "tags": ["API Documentation"],
+        "summary": "Swagger UI",
+        "description": "Swagger UI for viewing API documentation",
+        "responses": {
+          "200": {
+            "description": "Swagger UI HTML page"
+          }
+        }
+      }
+    }
+  }
+}
+

@@ -1,6 +1,7 @@
 import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from flasgger import Swagger, swag_from
 import chromadb
 import wandb
 import random
@@ -11,6 +12,17 @@ import time
 
 app = Flask(__name__)
 CORS(app)
+
+# Initialize Swagger
+swagger = Swagger(app, template={
+    "info": {
+        "title": "Flask Backend API",
+        "description": "MLOps Platform Flask Backend API for infrastructure testing",
+        "version": "1.0.0"
+    },
+    "basePath": "/",
+    "schemes": ["http", "https"]
+})
 
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
 CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
@@ -85,11 +97,61 @@ def _eureka_register():
         time.sleep(30)
 
 @app.route('/')
+@swag_from({
+    'tags': ['Health'],
+    'summary': 'Health check endpoint',
+    'responses': {
+        200: {
+            'description': 'Service is running',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'message': {'type': 'string'}
+                }
+            }
+        }
+    }
+})
 def hello():
+    """Health check endpoint
+    ---
+    """
     return jsonify({"message": "Flask API is running inside Kubernetes! 🚀"})
 
 @app.route('/test-infrastructure', methods=['POST'])
+@swag_from({
+    'tags': ['Infrastructure'],
+    'summary': 'Test infrastructure connections',
+    'description': 'Tests connections to ChromaDB and WandB infrastructure',
+    'consumes': ['application/json'],
+    'produces': ['application/json'],
+    'parameters': [
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': False,
+            'schema': {
+                'type': 'object'
+            }
+        }
+    ],
+    'responses': {
+        200: {
+            'description': 'Test results',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'chromadb': {'type': 'string'},
+                    'wandb': {'type': 'string'}
+                }
+            }
+        }
+    }
+})
 def test_infra():
+    """Test infrastructure connections
+    ---
+    """
     logs = {}
     
     try:
@@ -120,6 +182,11 @@ def test_infra():
         logs['wandb'] = f"Error: {str(e)}"
 
     return jsonify(logs)
+
+@app.route('/openapi.json')
+def openapi_spec():
+    """OpenAPI specification endpoint for service discovery"""
+    return jsonify(swagger.get_apispecs())
 
 if __name__ == '__main__':
     # Optional: self-register to Eureka if EUREKA_SERVER_URL is set
