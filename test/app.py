@@ -42,6 +42,16 @@ def _local_ip():
         return "127.0.0.1"
 
 
+def _check_connection(host, port, timeout=2):
+    """Check if a TCP port is open"""
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+
+
+
 def _eureka_register():
     if not EUREKA_SERVER_URL:
         return
@@ -158,27 +168,44 @@ def test_infra():
     """
     logs = {}
     
+    # 1. Test ChromaDB Connection
     try:
-        chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=int(CHROMA_PORT))
-        
-        collection = chroma_client.get_or_create_collection(name="test_collection")
-        
-        collection.add(
-            documents=["This is a test document from Flask"],
-            metadatas=[{"source": "flask_api"}],
-            ids=["id1"]
-        )
-        logs['chromadb'] = "Success: Connected and inserted vector data."
+        if _check_connection(CHROMA_HOST, CHROMA_PORT, timeout=3):
+            chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=int(CHROMA_PORT))
+            
+            collection = chroma_client.get_or_create_collection(name="test_collection")
+            
+            collection.add(
+                documents=["This is a test document from Flask"],
+                metadatas=[{"source": "flask_api"}],
+                ids=[f"id_{random.randint(1, 1000)}"]
+            )
+            logs['chromadb'] = f"Success: Connected to {CHROMA_HOST}:{CHROMA_PORT} and inserted vector data."
+        else:
+             logs['chromadb'] = f"Failed: Could not connect to {CHROMA_HOST}:{CHROMA_PORT} (Connection refused or timeout)"
     except Exception as e:
         logs['chromadb'] = f"Error: {str(e)}"
 
     # 2. Test WandB Connection
     try:
         if WANDB_URL:
-            run = wandb.init(project="k8s-local-test", name=f"api-test-{random.randint(1,1000)}")
-            wandb.log({"accuracy": random.random(), "loss": random.random()})
-            run.finish()
-            logs['wandb'] = f"Success: Logged metrics to {WANDB_URL}"
+            # Parse host/port from WANDB_URL for check
+            # Assumes format http://host:port
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(WANDB_URL)
+                host = parsed.hostname
+                port = parsed.port or 80
+                
+                if _check_connection(host, port, timeout=3):
+                    run = wandb.init(project="k8s-local-test", name=f"api-test-{random.randint(1,1000)}", reinit=True)
+                    wandb.log({"accuracy": random.random(), "loss": random.random()})
+                    run.finish()
+                    logs['wandb'] = f"Success: Logged metrics to {WANDB_URL}"
+                else:
+                    logs['wandb'] = f"Failed: Could not connect to WandB at {host}:{port}"
+            except Exception as parse_err:
+                 logs['wandb'] = f"Error parsing WANDB_URL: {str(parse_err)}"
         else:
             logs['wandb'] = "Skipped: WANDB_BASE_URL not set."
             
