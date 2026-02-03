@@ -1,6 +1,7 @@
 import json
+import re
 import urllib.parse
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Iterable
 
 from app.agents.base import BaseAgent
 from app.tools.registry import ToolRegistry
@@ -29,8 +30,9 @@ class ResearchAgent(BaseAgent):
         interests = normalized["interests"]
         region = normalized.get("origin") or ""
         season = normalized.get("season") or ""
+        user_query = normalized.get("query") or ""
 
-        query = f"best travel destinations in Vietnam for {days} days {group_type} budget"
+        query = user_query.strip() or f"best travel destinations in Vietnam for {days} days {group_type} budget"
         if region:
             query += f" from {region}"
         if season:
@@ -61,6 +63,10 @@ class ResearchAgent(BaseAgent):
                 emit("tool_call", {"tool": "chrome_mcp_browse", "args": tool_args})
 
         candidates = self._extract_candidates(tool_results, normalized)
+        if not candidates:
+            if callable(emit):
+                emit("agent_note", {"agent": self.name, "note": "No candidates extracted; retrying with relaxed parsing."})
+            candidates = self._extract_candidates(tool_results, normalized, relaxed=True)
 
         filtered = []
         for item in candidates:
@@ -70,17 +76,30 @@ class ResearchAgent(BaseAgent):
             if est_cost <= budget * 1.2:
                 filtered.append({**item, "estimated_cost": est_cost})
 
+        if not filtered and candidates:
+            filtered = candidates[:5]
         self._add_llm_note(context, f"Candidate list size={len(filtered)} for group_type={group_type}")
         return {"plan": steps, "candidates": filtered}
 
-    def _extract_candidates(self, tool_results: List[Any], normalized: Dict) -> List[Dict]:
+    def _extract_candidates(self, tool_results: List[Any], normalized: Dict, relaxed: bool = False) -> List[Dict]:
+        tool_text = self._flatten_text(tool_results)
         prompt = (
             "Extract 5-8 Vietnam travel destinations from the tool result. "
             "Return JSON array with fields: name, region, min_days, max_days, "
             "base_cost_per_day (USD), best_for (array), tags (array). "
             f"User context: {json.dumps(normalized, ensure_ascii=True)}. "
-            f"Tool results: {json.dumps(tool_results, ensure_ascii=True)[:8000]}"
+            f"Tool results: {json.dumps(tool_results, ensure_ascii=True)[:6000]}\n"
+            f"Tool text: {tool_text[:4000]}"
         )
+        if relaxed:
+            prompt = (
+                "Based on the tool results, produce 5-8 Vietnam travel destinations. "
+                "If fields are missing, use reasonable defaults. "
+                "Return ONLY a JSON array with fields: name, region, min_days, max_days, "
+                "base_cost_per_day, best_for, tags. "
+                f"User context: {json.dumps(normalized, ensure_ascii=True)}. "
+                f"Tool results: {json.dumps(tool_results, ensure_ascii=True)[:8000]}"
+            )
         response = self.llm.chat(
             [
                 {"role": "system", "content": "You extract structured travel data."},
@@ -89,23 +108,52 @@ class ResearchAgent(BaseAgent):
         )
         if not response:
             return []
-        try:
-            data = json.loads(response)
-            if isinstance(data, list):
-                return [
-                    {
-                        "name": item.get("name"),
-                        "region": item.get("region", ""),
-                        "min_days": int(item.get("min_days", 2)),
-                        "max_days": int(item.get("max_days", 5)),
-                        "base_cost_per_day": float(item.get("base_cost_per_day", 40)),
-                        "best_for": item.get("best_for", []),
-                        "tags": item.get("tags", []),
-                    }
-                    for item in data
-                    if item.get("name")
-                ]
-        except Exception:
-            return []
+        data = self._safe_json_parse(response)
+        if isinstance(data, list):
+            return [self._normalize_candidate(item) for item in data if isinstance(item, dict) and item.get("name")]
         return []
+
+    def _safe_json_parse(self, text: str) -> Any:
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+        match = re.search(r"\[[\s\S]*\]", text)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except Exception:
+                return None
+        return None
+
+    def _normalize_candidate(self, item: Dict) -> Dict:
+        return {
+            "name": item.get("name"),
+            "region": item.get("region", ""),
+            "min_days": int(item.get("min_days", 2)),
+            "max_days": int(item.get("max_days", 5)),
+            "base_cost_per_day": float(item.get("base_cost_per_day", 40)),
+            "best_for": item.get("best_for", []),
+            "tags": item.get("tags", []),
+        }
+
+    def _flatten_text(self, data: Any, limit: int = 300) -> str:
+        chunks: List[str] = []
+
+        def walk(value: Any):
+            if isinstance(value, str):
+                text = value.strip()
+                if len(text) >= 20:
+                    chunks.append(text)
+                return
+            if isinstance(value, dict):
+                for v in value.values():
+                    walk(v)
+                return
+            if isinstance(value, Iterable):
+                for v in value:
+                    walk(v)
+
+        walk(data)
+        return "\n".join(chunks[:limit])
 
