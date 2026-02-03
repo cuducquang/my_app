@@ -54,7 +54,7 @@ func main() {
 	handler = middleware.StructuredLoggingMiddleware(handler)
 
 	addr := ":" + cfg.Port
-	log.Printf("api-gateway listening on %s (eureka=%s, flaskApp=%s)", addr, cfg.EurekaServerURL, cfg.FlaskAppName)
+	log.Printf("api-gateway listening on %s (eureka=%s, agentApp=%s)", addr, cfg.EurekaServerURL, cfg.AgentAppName)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatal(err)
 	}

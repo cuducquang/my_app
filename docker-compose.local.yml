@@ -17,23 +17,19 @@ services:
     networks:
       - mlops-network
 
-  # Flask Backend Service
-  flask-service:
+  # Agent Service
+  agent-service:
     build:
       context: ./agent-service
       dockerfile: Dockerfile
-    container_name: flask-service-local
+    container_name: agent-service-local
     ports:
       - "5000:5000"
     environment:
       - PORT=5000
       - EUREKA_SERVER_URL=http://discovery-server:8761
-      - EUREKA_APP_NAME=FLASK-SERVICE
+      - EUREKA_APP_NAME=AGENT-SERVICE
       - PREFER_IP=true
-      # Infrastructure dependencies (optional for local testing)
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
-      - WANDB_BASE_URL=http://wandb-service:80
     depends_on:
       discovery-server:
         condition: service_healthy
@@ -57,14 +53,14 @@ services:
       - PORT=8080
       - APP_NAME=API-GATEWAY
       - EUREKA_SERVER_URL=http://discovery-server:8761/eureka
-      - FLASK_APP_NAME=FLASK-SERVICE
-      - FLASK_BASE_URL=http://flask-service:5000
+      - AGENT_APP_NAME=AGENT-SERVICE
+      - AGENT_BASE_URL=http://agent-service:5000
       - REQUEST_TIMEOUT=120s
       - PREFER_IP=true
     depends_on:
       discovery-server:
         condition: service_healthy
-      flask-service:
+      agent-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

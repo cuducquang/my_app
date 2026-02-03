@@ -37,38 +37,11 @@
         }
       }
     },
-    "/flask": {
-      "get": {
-        "tags": ["Flask Backend"],
-        "summary": "Get Flask service status",
-        "description": "Proxies request to Flask backend service",
-        "responses": {
-          "200": {
-            "description": "Flask service response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Flask service unavailable"
-          }
-        }
-      }
-    },
-    "/flask/test-infrastructure": {
+    "/agent": {
       "post": {
-        "tags": ["Flask Backend"],
-        "summary": "Test infrastructure connections",
-        "description": "Proxies POST request to Flask /test-infrastructure endpoint",
+        "tags": ["Agent Service"],
+        "summary": "Agent recommendations",
+        "description": "Proxies POST request to Agent /recommendations endpoint",
         "requestBody": {
           "required": false,
           "content": {
@@ -81,17 +54,14 @@
         },
         "responses": {
           "200": {
-            "description": "Infrastructure test results",
+            "description": "Agent recommendations",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "chromadb": {
-                      "type": "string"
-                    },
-                    "wandb": {
-                      "type": "string"
+                    "recommendations": {
+                      "type": "array"
                     }
                   }
                 }
@@ -102,7 +72,25 @@
             "description": "Method not allowed"
           },
           "502": {
-            "description": "Flask service unavailable"
+            "description": "Agent service unavailable"
+          }
+        }
+      }
+    },
+    "/agent/stream": {
+      "post": {
+        "tags": ["Agent Service"],
+        "summary": "Agent recommendations stream",
+        "description": "Proxies POST request to Agent /recommendations/stream endpoint",
+        "responses": {
+          "200": {
+            "description": "Streaming response"
+          },
+          "405": {
+            "description": "Method not allowed"
+          },
+          "502": {
+            "description": "Agent service unavailable"
           }
         }
       }

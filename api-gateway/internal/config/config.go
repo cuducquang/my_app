@@ -16,9 +16,9 @@ type Config struct {
 	InstanceID      string
 	PreferIP        bool
 
-	// Flask discovery
-	FlaskAppName  string
-	FlaskBaseURL  string // fallback if Eureka has no instances
+	// Agent service discovery
+	AgentAppName   string
+	AgentBaseURL   string // fallback if Eureka has no instances
 	RequestTimeout time.Duration
 }
 
@@ -92,14 +92,23 @@ func Load() Config {
 	ip := LocalIP()
 	instanceID := getenv("INSTANCE_ID", fmt.Sprintf("%s:%s:%s", strings.ToLower(appName), ip, port))
 
+	agentAppName := getenv("AGENT_APP_NAME", "")
+	if agentAppName == "" {
+		agentAppName = getenv("FLASK_APP_NAME", "AGENT-SERVICE")
+	}
+	agentBaseURL := strings.TrimRight(getenv("AGENT_BASE_URL", ""), "/")
+	if agentBaseURL == "" {
+		agentBaseURL = strings.TrimRight(getenv("FLASK_BASE_URL", ""), "/")
+	}
+
 	return Config{
 		Port:            port,
 		EurekaServerURL: strings.TrimRight(getenv("EUREKA_SERVER_URL", "http://localhost:8761/eureka"), "/"),
 		AppName:         appName,
 		InstanceID:      instanceID,
 		PreferIP:        strings.ToLower(getenv("PREFER_IP", "true")) == "true",
-		FlaskAppName:    getenv("FLASK_APP_NAME", "FLASK-SERVICE"),
-		FlaskBaseURL:    strings.TrimRight(getenv("FLASK_BASE_URL", ""), "/"),
+		AgentAppName:    agentAppName,
+		AgentBaseURL:    agentBaseURL,
 		RequestTimeout:  mustParseDuration(getenv("REQUEST_TIMEOUT", "120s"), 120*time.Second),
 	}
 }

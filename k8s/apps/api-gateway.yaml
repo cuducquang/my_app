@@ -33,10 +33,10 @@ spec:
                   fieldPath: metadata.name
             - name: EUREKA_SERVER_URL
               value: "http://discovery-server:8761/eureka"
-            - name: FLASK_APP_NAME
-              value: "FLASK-SERVICE"
-            - name: FLASK_BASE_URL
-              value: "http://flask-service"
+            - name: AGENT_APP_NAME
+              value: "AGENT-SERVICE"
+            - name: AGENT_BASE_URL
+              value: "http://agent-service"
             - name: REQUEST_TIMEOUT
               value: "120s"
           resources:

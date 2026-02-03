@@ -68,12 +68,12 @@ If you're using images from Docker Hub (built via GitHub Actions):
 ```bash
 # Apply all application services
 kubectl apply -f k8s/apps/discovery-server.yaml
-kubectl apply -f k8s/apps/flask-deployment.yaml
+kubectl apply -f k8s/apps/agent-service.yaml
 kubectl apply -f k8s/apps/api-gateway.yaml
 
 # Wait for pods to be ready
 kubectl wait --for=condition=ready pod -l app=discovery-server --timeout=120s
-kubectl wait --for=condition=ready pod -l app=flask-backend --timeout=120s
+kubectl wait --for=condition=ready pod -l app=agent-service --timeout=120s
 kubectl wait --for=condition=ready pod -l app=api-gateway --timeout=120s
 ```
 
@@ -84,17 +84,17 @@ If you're building images locally:
 ```bash
 # Build Docker images
 docker build -t cdquang/my-app:discovery-server-latest ./discovery-server
-docker build -t cdquang/my-app:flask-api-latest ./agent-service
+docker build -t cdquang/my-app:agent-service-latest ./agent-service
 docker build -t cdquang/my-app:api-gateway-latest ./api-gateway
 
 # Load images into kind cluster
 kind load docker-image cdquang/my-app:discovery-server-latest --name kind
-kind load docker-image cdquang/my-app:flask-api-latest --name kind
+kind load docker-image cdquang/my-app:agent-service-latest --name kind
 kind load docker-image cdquang/my-app:api-gateway-latest --name kind
 
 # Apply manifests
 kubectl apply -f k8s/apps/discovery-server.yaml
-kubectl apply -f k8s/apps/flask-deployment.yaml
+kubectl apply -f k8s/apps/agent-service.yaml
 kubectl apply -f k8s/apps/api-gateway.yaml
 ```
 
@@ -108,7 +108,7 @@ kubectl get pods
 kubectl get services
 
 # View Eureka dashboard (after port-forwarding, see below)
-# You should see both FLASK-SERVICE and API-GATEWAY registered
+# You should see both AGENT-SERVICE and API-GATEWAY registered
 ```
 
 ### 4. Accessing Services
@@ -118,7 +118,7 @@ kubectl get services
 In Kubernetes, each pod gets its own IP address (e.g., `10.244.0.20`) within the cluster's private network. Services are exposed via `ClusterIP` by default, which means:
 
 - **Pod IPs** (like `10.244.0.20:5000`) are only accessible from **inside the cluster**
-- **Service names** (like `flask-service:80`) resolve to ClusterIPs and are also only accessible from within the cluster
+- **Service names** (like `agent-service:80`) resolve to ClusterIPs and are also only accessible from within the cluster
 - To access services from your **localhost**, you need to use `kubectl port-forward` or expose services via `NodePort`/`LoadBalancer`
 
 #### Port Forwarding Services
@@ -133,8 +133,8 @@ kubectl port-forward service/api-gateway 8080:80
 
 # Now access:
 # - http://localhost:8080/health - Gateway health check
-# - http://localhost:8080/flask - Proxy to Flask GET /
-# - http://localhost:8080/flask/test-infrastructure - Proxy to Flask POST /test-infrastructure
+# - http://localhost:8080/agent - Proxy to Agent POST /recommendations
+# - http://localhost:8080/agent/stream - Proxy to Agent POST /recommendations/stream
 ```
 
 **Option 2: Direct Service Access (For Debugging)**
@@ -147,12 +147,12 @@ kubectl port-forward service/discovery-server 8761:8761
 # Access: http://localhost:8761
 
 # Flask Backend (direct)
-kubectl port-forward service/flask-service 5000:80
+kubectl port-forward service/agent-service 5000:80
 # Access: http://localhost:5000
 ```
 
 **Note**: The port-forward command maps `local-port:service-port`. For example:
-- `kubectl port-forward service/flask-service 5000:80` maps localhost:5000 → flask-service:80
+- `kubectl port-forward service/agent-service 5000:80` maps localhost:5000 → agent-service:80
 - The service port 80 routes to container port 5000 (as defined in the Service manifest)
 
 ### 5. Setup Infrastructure
@@ -188,7 +188,7 @@ kubectl apply -f k8s/infrastructure/chromadb-deployment.yaml
 
 This project includes a GitHub Actions workflow (`.github/workflows/docker-ci.yml`) that:
 
-1. Builds Docker images for `api-gateway`, `discovery-server`, and `flask-api`
+1. Builds Docker images for `api-gateway`, `discovery-server`, and `agent-service`
 2. Pushes images to Docker Hub (`cdquang/my-app`) with tags:
    - `{service}-latest` (e.g., `api-gateway-latest`)
    - `{service}-{commit-sha}` (e.g., `api-gateway-cacc7511...`)
@@ -208,7 +208,7 @@ After CI/CD builds new images, restart deployments to pull the latest:
 
 ```bash
 kubectl rollout restart deployment/discovery-server
-kubectl rollout restart deployment/flask-backend
+kubectl rollout restart deployment/agent-service
 kubectl rollout restart deployment/api-gateway
 ```
 
@@ -219,10 +219,10 @@ With `imagePullPolicy: Always`, Kubernetes will pull the latest images from Dock
 ## 📚 Service Discovery Flow
 
 1. **Discovery Server (Eureka)** runs on port 8761 and maintains a registry of all services
-2. **Flask Backend** registers itself as `FLASK-SERVICE` with Eureka on startup
+2. **Agent Service** registers itself as `AGENT-SERVICE` with Eureka on startup
 3. **API Gateway** registers itself as `API-GATEWAY` with Eureka on startup
 4. **API Gateway** queries Eureka to discover Flask instances when routing requests
-5. If Eureka is unavailable, API Gateway falls back to `FLASK_BASE_URL` (http://flask-service)
+5. If Eureka is unavailable, API Gateway falls back to `AGENT_BASE_URL` (http://agent-service)
 
 **View registered services:**
 
@@ -231,7 +231,7 @@ With `imagePullPolicy: Always`, Kubernetes will pull the latest images from Dock
 kubectl port-forward service/discovery-server 8761:8761
 
 # Open browser: http://localhost:8761
-# You should see both FLASK-SERVICE and API-GATEWAY registered
+# You should see both AGENT-SERVICE and API-GATEWAY registered
 ```
 
 ---
@@ -272,7 +272,7 @@ kubectl port-forward service/api-gateway 8080:80
 
 ```bash
 # Flask service Swagger (if you need direct access)
-kubectl port-forward service/flask-service 5000:80
+kubectl port-forward service/agent-service 5000:80
 # Access: http://localhost:5000/apidocs (flasgger UI)
 ```
 
@@ -305,7 +305,7 @@ docker-compose -f docker-compose.local.yml up --build
 
 # Test endpoints
 curl http://localhost:8080/health
-curl http://localhost:8080/flask
+curl -X POST http://localhost:8080/agent -H "Content-Type: application/json" -d '{}'
 
 # View Eureka dashboard
 # Open: http://localhost:8761
@@ -336,7 +336,7 @@ python app.py
 # Terminal 3: Start API Gateway
 cd api-gateway
 export EUREKA_SERVER_URL=http://localhost:8761/eureka
-export FLASK_BASE_URL=http://localhost:5000
+export AGENT_BASE_URL=http://localhost:5000
 go run main.go
 
 # Test: http://localhost:8080/health
@@ -353,10 +353,10 @@ Once services are running and port-forwarded:
 curl http://localhost:8080/health
 
 # Flask endpoint (via API Gateway)
-curl http://localhost:8080/flask
+curl -X POST http://localhost:8080/agent -H "Content-Type: application/json" -d '{}'
 
 # Flask test-infrastructure endpoint
-curl -X POST http://localhost:8080/flask/test-infrastructure \
+curl -X POST http://localhost:8080/agent/stream \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -369,7 +369,7 @@ curl -X POST http://localhost:8080/flask/test-infrastructure \
 
 1. Check pod logs:
    ```bash
-   kubectl logs -l app=flask-backend
+   kubectl logs -l app=agent-service
    kubectl logs -l app=api-gateway
    ```
 

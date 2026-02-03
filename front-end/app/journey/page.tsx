@@ -83,7 +83,13 @@ export default function JourneyPage() {
     setIsLoading(true);
     setAgentNotes({});
     setToolCalls([]);
-    setAgentStatuses((prev) => prev.map((agent) => ({ ...agent, state: "idle" })));
+    setAgentStatuses((prev) =>
+      prev.map((agent, index) => ({
+        ...agent,
+        state: index === 0 ? "thinking" : "idle",
+        detail: undefined,
+      }))
+    );
 
     const payload = {
       days: Number(formState.days),
@@ -196,7 +202,16 @@ export default function JourneyPage() {
         }
       }
     } catch (err) {
-      setError("Không thể gọi agent-service. Kiểm tra lại backend nhé.");
+      const message = "Không thể gọi API Gateway. Kiểm tra API_GATEWAY_URL và backend nhé.";
+      setError(message);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: message,
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -336,15 +351,15 @@ export default function JourneyPage() {
                 <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
               </div>
             ))}
+            {error && (
+              <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {error}
+              </div>
+            )}
             {isLoading && (
               <div className="flex items-center gap-2 text-sm text-zinc-400">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
                 Agents are thinking...
-              </div>
-            )}
-            {assistantMessage && error && (
-              <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                {error}
               </div>
             )}
           </div>

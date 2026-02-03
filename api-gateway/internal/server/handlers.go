@@ -34,8 +34,8 @@ func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client,
 				"swagger-ui":      "/swagger-ui",
 				"openapi":         "/openapi.json",
 				"aggregate":       "/api-docs/aggregate",
-				"flask":           "/flask",
-				"flask-test":      "/flask/test-infrastructure",
+				"agent":           "/agent",
+				"agent-stream":    "/agent/stream",
 				"circuit-breaker": "/admin/circuit-breaker",
 			},
 		}
@@ -68,7 +68,7 @@ func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client,
 	// OpenAPI spec for API Gateway
 	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		spec := `{
+	spec := `{
   "openapi": "3.0.0",
   "info": {
     "title": "API Gateway",
@@ -82,15 +82,15 @@ func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client,
         "responses": {"200": {"description": "OK"}}
       }
     },
-    "/flask": {
-      "get": {
-        "summary": "Get Flask service status",
+    "/agent": {
+      "post": {
+        "summary": "Get agent recommendations",
         "responses": {"200": {"description": "OK"}}
       }
     },
-    "/flask/test-infrastructure": {
+    "/agent/stream": {
       "post": {
-        "summary": "Test infrastructure",
+        "summary": "Stream agent recommendations",
         "responses": {"200": {"description": "OK"}}
       }
     }
@@ -120,27 +120,27 @@ func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client,
 			URL:  "/openapi.json",
 		})
 
-		// 2. Try to fetch Flask service spec via Eureka
-		flaskBase := cfg.FlaskBaseURL
-		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
-			flaskBase = u
+		// 2. Try to fetch Agent service spec via Eureka
+		agentBase := cfg.AgentBaseURL
+		if u, err := eureka.ResolveBaseURL(ctx, cfg.AgentAppName); err == nil {
+			agentBase = u
 		}
 
-		if flaskBase != "" {
-			// Fetch Flask's OpenAPI spec to verify it exists
-			flaskSpecURL := strings.TrimRight(flaskBase, "/") + "/openapi.json"
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, flaskSpecURL, nil)
+		if agentBase != "" {
+			// Fetch Agent's OpenAPI spec to verify it exists
+			agentSpecURL := strings.TrimRight(agentBase, "/") + "/openapi.json"
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, agentSpecURL, nil)
 			if err == nil {
 				req.Header.Set("Accept", "application/json")
 				resp, err := httpClient.Do(req)
 				if err == nil && resp.StatusCode == 200 {
-					var flaskSpec interface{}
-					if err := json.NewDecoder(resp.Body).Decode(&flaskSpec); err == nil {
+					var agentSpec interface{}
+					if err := json.NewDecoder(resp.Body).Decode(&agentSpec); err == nil {
 						// Use proxy URL instead of direct URL to avoid CORS issues
 						specs = append(specs, serviceSpec{
-							Name: "flask-service",
-							Spec: flaskSpec,
-							URL:  "/api-docs/flask/openapi.json", // Proxy endpoint, not direct URL
+							Name: "agent-service",
+							Spec: agentSpec,
+							URL:  "/api-docs/agent/openapi.json", // Proxy endpoint, not direct URL
 						})
 					}
 					resp.Body.Close()
@@ -156,22 +156,22 @@ func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client,
 		json.NewEncoder(w).Encode(result)
 	})
 
-	// Proxy endpoint for Flask's OpenAPI spec (to avoid CORS issues)
-	mux.HandleFunc("/api-docs/flask/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		base := cfg.FlaskBaseURL
+	// Proxy endpoint for Agent's OpenAPI spec (to avoid CORS issues)
+	mux.HandleFunc("/api-docs/agent/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		base := cfg.AgentBaseURL
 		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
 		defer cancel()
-		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
+		if u, err := eureka.ResolveBaseURL(ctx, cfg.AgentAppName); err == nil {
 			base = u
 		}
 		if base == "" {
-			http.Error(w, "flask service not available", 503)
+			http.Error(w, "agent service not available", 503)
 			return
 		}
 
-		// Fetch Flask's OpenAPI spec and proxy it
-		flaskSpecURL := strings.TrimRight(base, "/") + "/openapi.json"
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, flaskSpecURL, nil)
+		// Fetch Agent's OpenAPI spec and proxy it
+		agentSpecURL := strings.TrimRight(base, "/") + "/openapi.json"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, agentSpecURL, nil)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -201,31 +201,16 @@ func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client,
 		_, _ = w.Write([]byte(swagger.GetUIHTML()))
 	})
 
-	// Proxy: GET /flask -> Flask GET /
-	mux.HandleFunc("/flask", func(w http.ResponseWriter, r *http.Request) {
-		base := cfg.FlaskBaseURL
-		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
-		defer cancel()
-		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
-			base = u
-		}
-		if base == "" {
-			http.Error(w, "no flask base url (set FLASK_BASE_URL or register FLASK_APP_NAME in Eureka)", 500)
-			return
-		}
-		proxyClient.ProxyJSON(w, r, http.MethodGet, base+"/", nil)
-	})
-
 	// Proxy: POST /agent -> Agent-service POST /recommendations
 	mux.HandleFunc("/agent", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
-		base := cfg.FlaskBaseURL
+		base := cfg.AgentBaseURL
 		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
 		defer cancel()
-		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
+		if u, err := eureka.ResolveBaseURL(ctx, cfg.AgentAppName); err == nil {
 			base = u
 		}
 		if base == "" {
@@ -245,10 +230,10 @@ func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client,
 			http.Error(w, "method not allowed", 405)
 			return
 		}
-		base := cfg.FlaskBaseURL
+		base := cfg.AgentBaseURL
 		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
 		defer cancel()
-		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
+		if u, err := eureka.ResolveBaseURL(ctx, cfg.AgentAppName); err == nil {
 			base = u
 		}
 		if base == "" {
@@ -260,30 +245,6 @@ func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client,
 			body = []byte(`{}`)
 		}
 		proxyClient.ProxyStream(w, r, http.MethodPost, base+"/recommendations/stream", body)
-	})
-
-	// Proxy: POST /flask/test-infrastructure -> Flask POST /test-infrastructure
-	mux.HandleFunc("/flask/test-infrastructure", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", 405)
-			return
-		}
-		base := cfg.FlaskBaseURL
-		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
-		defer cancel()
-		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
-			base = u
-		}
-		if base == "" {
-			http.Error(w, "no flask base url (set FLASK_BASE_URL or register FLASK_APP_NAME in Eureka)", 500)
-			return
-		}
-		// Forward incoming JSON body if any; otherwise send empty object.
-		body, _ := io.ReadAll(r.Body)
-		if len(bytes.TrimSpace(body)) == 0 {
-			body = []byte(`{}`)
-		}
-		proxyClient.ProxyJSON(w, r, http.MethodPost, base+"/test-infrastructure", body)
 	})
 
 	return mux

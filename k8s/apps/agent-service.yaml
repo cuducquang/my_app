@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flask-backend
+  name: agent-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: flask-backend
+      app: agent-service
   template:
     metadata:
       labels:
-        app: flask-backend
+        app: agent-service
     spec:
       containers:
-      - name: flask-backend
-        image: cdquang/my-app:flask-api-latest
+      - name: agent-service
+        image: cdquang/my-app:agent-service-latest
         imagePullPolicy: Always 
         resources:
           requests:
@@ -30,12 +30,10 @@ spec:
           value: "chromadb-service"
         - name: CHROMA_PORT
           value: "8000"
-        - name: MLFLOW_TRACKING_URI
-          value: "http://mlflow-service:80"
         - name: EUREKA_SERVER_URL
           value: "http://discovery-server:8761"
         - name: EUREKA_APP_NAME
-          value: "FLASK-SERVICE"
+          value: "AGENT-SERVICE"
         - name: CHROME_MCP_URL
           value: "http://chrome-mcp:8000"
         - name: CHROME_MCP_TOOL
@@ -44,10 +42,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: flask-service
+  name: agent-service
 spec:
   selector:
-    app: flask-backend
+    app: agent-service
   ports:
     - protocol: TCP
       port: 80
