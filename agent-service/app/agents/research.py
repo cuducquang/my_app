@@ -1,6 +1,6 @@
 import json
 import urllib.parse
-from typing import Dict, List
+from typing import Dict, List, Any
 
 from app.agents.base import BaseAgent
 from app.tools.registry import ToolRegistry
@@ -27,19 +27,40 @@ class ResearchAgent(BaseAgent):
         people = normalized["people"]
         group_type = normalized["group_type"]
         interests = normalized["interests"]
+        region = normalized.get("origin") or ""
+        season = normalized.get("season") or ""
 
         query = f"best travel destinations in Vietnam for {days} days {group_type} budget"
+        if region:
+            query += f" from {region}"
+        if season:
+            query += f" {season} season"
         if interests:
             query += " " + " ".join(interests)
-        search_url = "https://duckduckgo.com/?" + urllib.parse.urlencode({"q": query})
 
-        tool_args = {"url": search_url, "instructions": "Find top travel destinations with brief hints."}
-        tool_result = self.registry.call("chrome_mcp_browse", tool_args)
-        context.setdefault("tool_calls", []).append({"tool": "chrome_mcp_browse", "args": tool_args})
-        if callable(emit):
-            emit("tool_call", {"tool": "chrome_mcp_browse", "args": tool_args})
+        sources = [
+            "https://duckduckgo.com/?",
+            "https://www.google.com/search?",
+            "https://www.bing.com/search?",
+            "https://vietnamtourism.gov.vn/search?",
+        ]
+        tool_results: List[Any] = []
+        for base in sources:
+            search_url = base + urllib.parse.urlencode({"q": query})
+            instructions = "Find top Vietnam travel destinations with brief hints and seasonality."
+            if "vietnamtourism.gov.vn" in base:
+                instructions = (
+                    "Use the Vietnam Tourism site to extract official destinations, "
+                    "best seasons, and suggested duration. Summarize key highlights."
+                )
+            tool_args = {"url": search_url, "instructions": instructions}
+            tool_result = self.registry.call("chrome_mcp_browse", tool_args)
+            tool_results.append(tool_result)
+            context.setdefault("tool_calls", []).append({"tool": "chrome_mcp_browse", "args": tool_args})
+            if callable(emit):
+                emit("tool_call", {"tool": "chrome_mcp_browse", "args": tool_args})
 
-        candidates = self._extract_candidates(tool_result, normalized)
+        candidates = self._extract_candidates(tool_results, normalized)
 
         filtered = []
         for item in candidates:
@@ -52,13 +73,13 @@ class ResearchAgent(BaseAgent):
         self._add_llm_note(context, f"Candidate list size={len(filtered)} for group_type={group_type}")
         return {"plan": steps, "candidates": filtered}
 
-    def _extract_candidates(self, tool_result: Dict, normalized: Dict) -> List[Dict]:
+    def _extract_candidates(self, tool_results: List[Any], normalized: Dict) -> List[Dict]:
         prompt = (
             "Extract 5-8 Vietnam travel destinations from the tool result. "
             "Return JSON array with fields: name, region, min_days, max_days, "
             "base_cost_per_day (USD), best_for (array), tags (array). "
             f"User context: {json.dumps(normalized, ensure_ascii=True)}. "
-            f"Tool result: {json.dumps(tool_result, ensure_ascii=True)[:8000]}"
+            f"Tool results: {json.dumps(tool_results, ensure_ascii=True)[:8000]}"
         )
         response = self.llm.chat(
             [
