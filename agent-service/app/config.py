@@ -9,6 +9,15 @@ def getenv(key: str, default: str = "") -> str:
     return value if value else default
 
 
+def load_env_file() -> None:
+    try:
+        from dotenv import load_dotenv  # type: ignore
+
+        load_dotenv()
+    except Exception:
+        return
+
+
 def local_ip() -> str:
     try:
         return socket.gethostbyname(socket.gethostname())
@@ -32,12 +41,13 @@ class AppConfig:
 
 
 def load_config() -> AppConfig:
+    load_env_file()
     port = int(getenv("PORT", "5000"))
     eureka_server_url = getenv("EUREKA_SERVER_URL", "").rstrip("/")
     eureka_app_name = getenv("EUREKA_APP_NAME", "AGENT-SERVICE")
     instance_id = getenv("EUREKA_INSTANCE_ID", f"{eureka_app_name.lower()}:{local_ip()}:{port}")
     prefer_ip = getenv("PREFER_IP", "true").lower() == "true"
-    chrome_mcp_url = getenv("CHROME_MCP_URL", "")
+    chrome_mcp_url = getenv("CHROME_MCP_URL", "http://localhost:8000/mcp")
     chrome_mcp_tool = getenv("CHROME_MCP_TOOL", "browser.navigate")
 
     agent_keys = {
@@ -46,19 +56,19 @@ def load_config() -> AppConfig:
         "agent3": getenv("AGENT3", ""),
     }
     agent_base_urls = {
-        "agent1": getenv("AGENT1_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
-        "agent2": getenv("AGENT2_BASE_URL", "https://api.anthropic.com/v1"),
-        "agent3": getenv("AGENT3_BASE_URL", "https://openrouter.ai/api/v1"),
+        "agent1": getenv("AGENT1_BASE_URL", ""),
+        "agent2": getenv("AGENT2_BASE_URL", ""),
+        "agent3": getenv("AGENT3_BASE_URL", ""),
     }
     agent_models = {
-        "agent1": getenv("AGENT1_MODEL", "gemini-1.5-flash"),
-        "agent2": getenv("AGENT2_MODEL", "claude-3-5-sonnet-20241022"),
-        "agent3": getenv("AGENT3_MODEL", "openai/gpt-4o-mini"),
+        "agent1": getenv("AGENT1_MODEL", ""),
+        "agent2": getenv("AGENT2_MODEL", ""),
+        "agent3": getenv("AGENT3_MODEL", ""),
     }
     agent_providers = {
-        "agent1": getenv("AGENT1_PROVIDER", "gemini"),
-        "agent2": getenv("AGENT2_PROVIDER", "claude"),
-        "agent3": getenv("AGENT3_PROVIDER", "openrouter"),
+        "agent1": getenv("AGENT1_PROVIDER", ""),
+        "agent2": getenv("AGENT2_PROVIDER", ""),
+        "agent3": getenv("AGENT3_PROVIDER", ""),
     }
 
     return AppConfig(

@@ -23,6 +23,14 @@ CONFIG = load_config()
 logger = get_logger()
 
 
+def mask_key(value: str) -> str:
+    if not value:
+        return "missing"
+    if len(value) <= 8:
+        return value[0] + "***"
+    return value[:6] + "..." + value[-4:]
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app)
@@ -61,7 +69,51 @@ def create_app() -> Flask:
         if not CONFIG.chrome_mcp_url:
             return {"status": "not_configured", "message": "CHROME_MCP_URL is not set", "url": url}
         client = MCPClient(CONFIG.chrome_mcp_url)
-        return client.call_tool(CONFIG.chrome_mcp_tool, {"url": url, "instructions": instructions})
+        page = client.call_tool("new_page", {"url": url})
+        page_result = page.get("result") if isinstance(page, dict) else {}
+        page_id = page_result.get("pageId") if isinstance(page_result, dict) else None
+        if page_id is not None:
+            client.call_tool("select_page", {"pageId": page_id, "bringToFront": False})
+            client.call_tool("wait_for", {"text": "Vietnam", "timeout": 8000})
+
+        eval_result = client.call_tool(
+            "evaluate_script",
+            {
+                "function": """() => {
+  const titles = Array.from(document.querySelectorAll('h3')).map((el) => el.innerText).filter(Boolean);
+  const anchors = Array.from(document.querySelectorAll('a')).map((el) => el.innerText).filter(Boolean);
+  const bodyText = document.body && document.body.innerText ? document.body.innerText : '';
+  return {
+    titles: titles.slice(0, 15),
+    anchors: anchors.slice(0, 20),
+    bodyText: bodyText.slice(0, 20000),
+  };
+}""",
+            },
+        )
+        eval_payload = {}
+        if isinstance(eval_result, dict):
+            eval_payload = eval_result.get("result") or {}
+        eval_text = ""
+        eval_titles = []
+        if isinstance(eval_payload, dict):
+            eval_text = str(eval_payload.get("bodyText") or "")
+            eval_titles = eval_payload.get("titles") or []
+
+        snapshot = client.call_tool("take_snapshot", {"verbose": True})
+        snapshot_result = snapshot.get("result") if isinstance(snapshot, dict) else snapshot
+        snapshot_text = ""
+        if isinstance(snapshot_result, dict):
+            snapshot_text = str(snapshot_result.get("content") or snapshot_result.get("snapshot") or "")
+        return {
+            "status": "ok",
+            "page": page,
+            "eval_text": eval_text,
+            "eval_titles": eval_titles,
+            "snapshot": snapshot,
+            "snapshot_text": snapshot_text,
+            "instructions": instructions,
+        }
 
     registry.register_simple(
         name="chrome_mcp_browse",
@@ -73,6 +125,19 @@ def create_app() -> Flask:
     skills_dir = "app/skills"
     loaded_skills = load_skill_plugins(registry, skills_dir)
     orchestrator = Orchestrator(CONFIG, registry)
+
+    logger.info(
+        "agent-service config providers: agent1=%s agent2=%s agent3=%s",
+        CONFIG.agent_providers.get("agent1"),
+        CONFIG.agent_providers.get("agent2"),
+        CONFIG.agent_providers.get("agent3"),
+    )
+    logger.info(
+        "agent-service api keys: agent1=%s agent2=%s agent3=%s",
+        mask_key(CONFIG.agent_keys.get("agent1", "")),
+        mask_key(CONFIG.agent_keys.get("agent2", "")),
+        mask_key(CONFIG.agent_keys.get("agent3", "")),
+    )
 
     @app.route("/")
     def root() -> Any:
@@ -127,6 +192,7 @@ def create_app() -> Flask:
         if not isinstance(payload, dict):
             return jsonify({"error": "payload must be a JSON object"}), 400
         result = orchestrator.run(payload)
+        result["answer"] = format_recommendations_text(result)
         return jsonify(result)
 
     def stream_recommendations(payload: Dict[str, Any]):
@@ -139,6 +205,7 @@ def create_app() -> Flask:
             try:
                 result = orchestrator.run_with_stream(payload, emit)
                 message = format_recommendations_text(result)
+                result["answer"] = message
                 for token in message.split():
                     emit("token", {"text": token + " "})
                     time.sleep(0.02)

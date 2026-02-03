@@ -2,3 +2,4 @@ flask
 flask-cors
 flasgger
 requests
+python-dotenv

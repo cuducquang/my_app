@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 type AgentState = "idle" | "thinking" | "done";
 
@@ -17,6 +17,7 @@ type ChatMessage = {
 };
 
 type AgentResponse = {
+  answer?: string;
   recommendations?: Array<{
     destination: string;
     region: string;
@@ -31,6 +32,10 @@ type AgentResponse = {
 const defaultAgents = ["intake", "research", "recommend"];
 
 function formatResponse(result: AgentResponse): string {
+  const direct = result.answer;
+  if (direct && direct.trim().length > 0) {
+    return direct;
+  }
   if (!result.recommendations?.length) {
     return "Mình chưa tìm được gợi ý phù hợp. Bạn thử tăng ngân sách hoặc số ngày nhé.";
   }
@@ -61,10 +66,6 @@ export default function JourneyPage() {
 
   const streamingMessageId = useRef<string | null>(null);
 
-  const assistantMessage = useMemo(
-    () => messages.findLast((msg) => msg.role === "assistant"),
-    [messages]
-  );
 
 
   async function handleSubmit(event: React.FormEvent) {
@@ -154,41 +155,48 @@ export default function JourneyPage() {
           }
 
           if (!dataPayload) continue;
-          let data: any = {};
+          let data: Record<string, unknown> = {};
           try {
             data = JSON.parse(dataPayload);
           } catch {
             data = { text: dataPayload };
           }
 
-          if (eventName === "token" && data.text) {
-            updateAssistant(data.text);
+          const text = typeof data.text === "string" ? data.text : undefined;
+          const agentName = typeof data.agent === "string" ? data.agent : undefined;
+          const duration =
+            typeof data.duration_ms === "number" ? data.duration_ms : undefined;
+          const toolName = typeof data.tool === "string" ? data.tool : undefined;
+          const noteText = typeof data.note === "string" ? data.note : undefined;
+
+          if (eventName === "token" && text) {
+            updateAssistant(text);
           }
 
-          if (eventName === "agent_start") {
+          if (eventName === "agent_start" && agentName) {
             setAgentStatuses((prev) =>
               prev.map((agent) =>
-                agent.name === data.agent ? { ...agent, state: "thinking" } : agent
+                agent.name === agentName ? { ...agent, state: "thinking" } : agent
               )
             );
           }
 
-          if (eventName === "agent_done") {
+          if (eventName === "agent_done" && agentName) {
             setAgentStatuses((prev) =>
               prev.map((agent) =>
-                agent.name === data.agent
-                  ? { ...agent, state: "done", detail: `${data.duration_ms}ms` }
+                agent.name === agentName
+                  ? { ...agent, state: "done", detail: duration ? `${duration}ms` : undefined }
                   : agent
               )
             );
           }
 
-          if (eventName === "tool_call" && data.tool) {
-            setToolCalls((prev) => [...prev, `${data.tool}`]);
+          if (eventName === "tool_call" && toolName) {
+            setToolCalls((prev) => [...prev, toolName]);
           }
 
-          if (eventName === "agent_note" && data.agent && data.note) {
-            setAgentNotes((prev) => ({ ...prev, [data.agent]: data.note }));
+          if (eventName === "agent_note" && agentName && noteText) {
+            setAgentNotes((prev) => ({ ...prev, [agentName]: noteText }));
           }
 
           if (eventName === "final") {
@@ -201,7 +209,7 @@ export default function JourneyPage() {
           }
         }
       }
-    } catch (err) {
+    } catch {
       const message = "Không thể gọi API Gateway. Kiểm tra API_GATEWAY_URL và backend nhé.";
       setError(message);
       setMessages((prev) => [

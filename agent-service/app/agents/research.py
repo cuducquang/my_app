@@ -61,12 +61,13 @@ class ResearchAgent(BaseAgent):
             context.setdefault("tool_calls", []).append({"tool": "chrome_mcp_browse", "args": tool_args})
             if callable(emit):
                 emit("tool_call", {"tool": "chrome_mcp_browse", "args": tool_args})
+                emit("tool_result", self._summarize_tool_result(tool_result, search_url))
 
-        candidates = self._extract_candidates(tool_results, normalized)
+        candidates = self._extract_candidates(tool_results, normalized, emit=emit)
         if not candidates:
             if callable(emit):
                 emit("agent_note", {"agent": self.name, "note": "No candidates extracted; retrying with relaxed parsing."})
-            candidates = self._extract_candidates(tool_results, normalized, relaxed=True)
+            candidates = self._extract_candidates(tool_results, normalized, relaxed=True, emit=emit)
 
         filtered = []
         for item in candidates:
@@ -81,15 +82,23 @@ class ResearchAgent(BaseAgent):
         self._add_llm_note(context, f"Candidate list size={len(filtered)} for group_type={group_type}")
         return {"plan": steps, "candidates": filtered}
 
-    def _extract_candidates(self, tool_results: List[Any], normalized: Dict, relaxed: bool = False) -> List[Dict]:
+    def _extract_candidates(
+        self, tool_results: List[Any], normalized: Dict, relaxed: bool = False, emit=None
+    ) -> List[Dict]:
         tool_text = self._flatten_text(tool_results)
+        titles = self._collect_titles(tool_results)
+        if not tool_text:
+            if callable(emit):
+                emit("agent_note", {"agent": self.name, "note": "Tool text is empty; cannot extract candidates."})
+            return []
         prompt = (
             "Extract 5-8 Vietnam travel destinations from the tool result. "
             "Return JSON array with fields: name, region, min_days, max_days, "
             "base_cost_per_day (USD), best_for (array), tags (array). "
             f"User context: {json.dumps(normalized, ensure_ascii=True)}. "
-            f"Tool results: {json.dumps(tool_results, ensure_ascii=True)[:6000]}\n"
-            f"Tool text: {tool_text[:4000]}"
+            f"Tool titles: {json.dumps(titles, ensure_ascii=True)[:1200]}\n"
+            f"Tool results: {json.dumps(tool_results, ensure_ascii=True)[:4000]}\n"
+            f"Tool text: {tool_text[:3000]}"
         )
         if relaxed:
             prompt = (
@@ -107,17 +116,33 @@ class ResearchAgent(BaseAgent):
             ]
         )
         if not response:
-            return []
+            if callable(emit):
+                emit(
+                    "agent_note",
+                    {"agent": self.name, "note": "LLM extraction returned empty. Check AGENT2 credentials/model."},
+                )
+            return self._candidates_from_titles(titles, normalized) or self._heuristic_candidates(tool_text, normalized)
         data = self._safe_json_parse(response)
         if isinstance(data, list):
             return [self._normalize_candidate(item) for item in data if isinstance(item, dict) and item.get("name")]
-        return []
+        if callable(emit):
+            emit(
+                "agent_note",
+                {"agent": self.name, "note": "LLM returned non-JSON. Falling back to heuristic extraction."},
+            )
+        return self._candidates_from_titles(titles, normalized) or self._heuristic_candidates(tool_text, normalized)
 
     def _safe_json_parse(self, text: str) -> Any:
         try:
             return json.loads(text)
         except Exception:
             pass
+        fenced = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
+        if fenced:
+            try:
+                return json.loads(fenced.group(1))
+            except Exception:
+                pass
         match = re.search(r"\[[\s\S]*\]", text)
         if match:
             try:
@@ -137,6 +162,63 @@ class ResearchAgent(BaseAgent):
             "tags": item.get("tags", []),
         }
 
+    def _heuristic_candidates(self, text: str, normalized: Dict) -> List[Dict]:
+        if not text:
+            return []
+        pattern = re.compile(r"\b([A-Z][\w\-]+(?:\s+[A-Z][\w\-]+){0,3})\b")
+        stopwords = {
+            "Vietnam",
+            "Viet",
+            "Travel",
+            "Trips",
+            "Trip",
+            "Guide",
+            "Best",
+            "Top",
+            "Places",
+            "Destinations",
+            "Things",
+            "Day",
+            "Days",
+            "Family",
+            "Group",
+            "Vacation",
+            "DuckDuckGo",
+            "Google",
+            "Bing",
+            "Search",
+            "Latest",
+            "RootWebArea",
+        }
+        seen = set()
+        names = []
+        for match in pattern.findall(text):
+            name = match.strip()
+            if name in stopwords or len(name) < 3:
+                continue
+            lowered = name.lower()
+            if any(word in lowered for word in ["duckduckgo", "google", "bing", "search"]):
+                continue
+            if any(char.isdigit() for char in name):
+                continue
+            if name not in seen:
+                seen.add(name)
+                names.append(name)
+            if len(names) >= 8:
+                break
+        defaults = {
+            "region": "",
+            "min_days": max(2, int(normalized.get("days", 3)) - 1),
+            "max_days": max(3, int(normalized.get("days", 3)) + 1),
+            "base_cost_per_day": 40,
+            "best_for": [normalized.get("group_type", "group")],
+            "tags": normalized.get("interests", []),
+        }
+        return [
+            {"name": name, **defaults}
+            for name in names
+        ]
+
     def _flatten_text(self, data: Any, limit: int = 300) -> str:
         chunks: List[str] = []
 
@@ -147,6 +229,14 @@ class ResearchAgent(BaseAgent):
                     chunks.append(text)
                 return
             if isinstance(value, dict):
+                if "snapshot_text" in value and isinstance(value["snapshot_text"], str):
+                    chunks.append(value["snapshot_text"])
+                if "eval_text" in value and isinstance(value["eval_text"], str):
+                    chunks.append(value["eval_text"])
+                if "eval_titles" in value and isinstance(value["eval_titles"], list):
+                    for title in value["eval_titles"]:
+                        if isinstance(title, str):
+                            chunks.append(title)
                 for v in value.values():
                     walk(v)
                 return
@@ -156,4 +246,61 @@ class ResearchAgent(BaseAgent):
 
         walk(data)
         return "\n".join(chunks[:limit])
+
+    def _collect_titles(self, data: Any) -> List[str]:
+        titles: List[str] = []
+
+        def walk(value: Any):
+            if isinstance(value, dict):
+                if "eval_titles" in value and isinstance(value["eval_titles"], list):
+                    for title in value["eval_titles"]:
+                        if isinstance(title, str) and title.strip():
+                            titles.append(title.strip())
+                for v in value.values():
+                    walk(v)
+            elif isinstance(value, list):
+                for v in value:
+                    walk(v)
+
+        walk(data)
+        return titles[:50]
+
+    def _candidates_from_titles(self, titles: List[str], normalized: Dict) -> List[Dict]:
+        cleaned: List[str] = []
+        for title in titles:
+            base = re.split(r"\s-\s|\s\|\s|\s\(\d{4}\)\s", title)[0]
+            base = re.sub(r"\b(in|at|for)\s+Vietnam\b", "", base, flags=re.IGNORECASE).strip()
+            base = re.sub(r"\b(Vietnam|Travel|Trip|Guide|Best|Top|Places|Destinations)\b", "", base, flags=re.IGNORECASE).strip()
+            base = re.sub(r"\s{2,}", " ", base)
+            if len(base) < 4 or any(char.isdigit() for char in base):
+                continue
+            cleaned.append(base)
+            if len(cleaned) >= 8:
+                break
+
+        defaults = {
+            "region": "",
+            "min_days": max(2, int(normalized.get("days", 3)) - 1),
+            "max_days": max(3, int(normalized.get("days", 3)) + 1),
+            "base_cost_per_day": 40,
+            "best_for": [normalized.get("group_type", "group")],
+            "tags": normalized.get("interests", []),
+        }
+        return [{"name": name, **defaults} for name in cleaned]
+
+    def _summarize_tool_result(self, tool_result: Any, url: str) -> Dict:
+        if isinstance(tool_result, dict) and "error" in tool_result:
+            return {"tool": "chrome_mcp_browse", "url": url, "status": "error", "error": tool_result.get("error")}
+        if isinstance(tool_result, dict):
+            status = tool_result.get("status", "ok")
+            result = tool_result.get("result", tool_result)
+            text = self._flatten_text(result)
+            return {
+                "tool": "chrome_mcp_browse",
+                "url": url,
+                "status": status,
+                "keys": list(result.keys()) if isinstance(result, dict) else [],
+                "text_length": len(text),
+            }
+        return {"tool": "chrome_mcp_browse", "url": url, "status": "unknown"}
 

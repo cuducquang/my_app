@@ -1,6 +1,7 @@
 const express = require("express");
 const { spawn } = require("child_process");
 const { randomUUID } = require("crypto");
+const path = require("path");
 
 const PORT = process.env.PORT || 8000;
 const MCP_ARGS = process.env.CHROME_MCP_ARGS
@@ -13,8 +14,15 @@ app.use(express.json({ limit: "1mb" }));
 const pending = new Map();
 
 function startMcpProcess() {
-  const child = spawn("node", ["node_modules/.bin/chrome-devtools-mcp", ...MCP_ARGS], {
+  const isWin = process.platform === "win32";
+  const npxCmd = isWin ? "npx" : "npx";
+  const args = ["chrome-devtools-mcp@latest", ...MCP_ARGS];
+
+  const child = spawn(npxCmd, args, {
     stdio: ["pipe", "pipe", "pipe"],
+    cwd: path.resolve(__dirname),
+    env: { ...process.env },
+    shell: true,
   });
 
   let buffer = "";
