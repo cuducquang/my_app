@@ -20,7 +20,7 @@ services:
   # Flask Backend Service
   flask-service:
     build:
-      context: ./test
+      context: ./agent-service
       dockerfile: Dockerfile
     container_name: flask-service-local
     ports:

@@ -84,7 +84,7 @@ If you're building images locally:
 ```bash
 # Build Docker images
 docker build -t cdquang/my-app:discovery-server-latest ./discovery-server
-docker build -t cdquang/my-app:flask-api-latest ./test
+docker build -t cdquang/my-app:flask-api-latest ./agent-service
 docker build -t cdquang/my-app:api-gateway-latest ./api-gateway
 
 # Load images into kind cluster
@@ -329,7 +329,7 @@ cd discovery-server
 mvn spring-boot:run
 
 # Terminal 2: Start Flask
-cd test
+cd agent-service
 export EUREKA_SERVER_URL=http://localhost:8761
 python app.py
 

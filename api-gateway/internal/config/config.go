@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"fmt"
@@ -19,7 +19,7 @@ type Config struct {
 	// Flask discovery
 	FlaskAppName  string
 	FlaskBaseURL  string // fallback if Eureka has no instances
-	RequestTimout time.Duration
+	RequestTimeout time.Duration
 }
 
 func getenv(key, def string) string {
@@ -30,7 +30,8 @@ func getenv(key, def string) string {
 	return v
 }
 
-func localIP() string {
+// LocalIP returns the best-effort local IP for service registration.
+func LocalIP() string {
 	// Prefer POD_IP from k8s downward API, then HOSTNAME, then auto-detect
 	if podIP := strings.TrimSpace(os.Getenv("POD_IP")); podIP != "" {
 		return podIP
@@ -84,10 +85,11 @@ func mustParseDuration(s string, def time.Duration) time.Duration {
 	return d
 }
 
-func loadConfig() Config {
+// Load reads environment variables and returns a Config.
+func Load() Config {
 	port := getenv("PORT", "8080")
 	appName := getenv("APP_NAME", "API-GATEWAY")
-	ip := localIP()
+	ip := LocalIP()
 	instanceID := getenv("INSTANCE_ID", fmt.Sprintf("%s:%s:%s", strings.ToLower(appName), ip, port))
 
 	return Config{
@@ -98,6 +100,6 @@ func loadConfig() Config {
 		PreferIP:        strings.ToLower(getenv("PREFER_IP", "true")) == "true",
 		FlaskAppName:    getenv("FLASK_APP_NAME", "FLASK-SERVICE"),
 		FlaskBaseURL:    strings.TrimRight(getenv("FLASK_BASE_URL", ""), "/"),
-		RequestTimout:   mustParseDuration(getenv("REQUEST_TIMEOUT", "10s"), 10*time.Second),
+		RequestTimeout:  mustParseDuration(getenv("REQUEST_TIMEOUT", "10s"), 10*time.Second),
 	}
 }

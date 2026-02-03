@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"bytes"
@@ -10,14 +10,14 @@ import (
 	"github.com/sony/gobreaker"
 )
 
-// ProxyClient handles proxied requests with Circuit Breaker
-type ProxyClient struct {
+// Client handles proxied requests with Circuit Breaker
+type Client struct {
 	client *http.Client
 	cb     *gobreaker.CircuitBreaker
 }
 
-// NewProxyClient creates a new ProxyClient with default Circuit Breaker settings
-func NewProxyClient(client *http.Client) *ProxyClient {
+// New creates a new Client with default Circuit Breaker settings
+func New(client *http.Client) *Client {
 	st := gobreaker.Settings{
 		Name:        "API Gateway Proxy",
 		MaxRequests: 1,                // Max requests allowed in half-open state
@@ -28,14 +28,14 @@ func NewProxyClient(client *http.Client) *ProxyClient {
 			return counts.ConsecutiveFailures >= 3
 		},
 	}
-	return &ProxyClient{
+	return &Client{
 		client: client,
 		cb:     gobreaker.NewCircuitBreaker(st),
 	}
 }
 
 // ProxyJSON proxies a JSON request to another service protected by Circuit Breaker
-func (p *ProxyClient) ProxyJSON(w http.ResponseWriter, r *http.Request, method, url string, body []byte) {
+func (p *Client) ProxyJSON(w http.ResponseWriter, r *http.Request, method, url string, body []byte) {
 	var bodyReader io.Reader
 	if body != nil {
 		bodyReader = bytes.NewReader(body)
@@ -96,11 +96,11 @@ func (p *ProxyClient) ProxyJSON(w http.ResponseWriter, r *http.Request, method, 
 }
 
 // State returns the current state of the circuit breaker
-func (p *ProxyClient) State() gobreaker.State {
+func (p *Client) State() gobreaker.State {
 	return p.cb.State()
 }
 
 // Counts returns the current execution counts
-func (p *ProxyClient) Counts() gobreaker.Counts {
+func (p *Client) Counts() gobreaker.Counts {
 	return p.cb.Counts()
 }

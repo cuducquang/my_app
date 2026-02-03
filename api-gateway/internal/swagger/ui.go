@@ -1,7 +1,7 @@
-package main
+package swagger
 
 // getSwaggerUIHTML returns the Swagger UI HTML page
-func getSwaggerUIHTML() string {
+func GetUIHTML() string {
 	return `<!DOCTYPE html>
 <html>
 <head>

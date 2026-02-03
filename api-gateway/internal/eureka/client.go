@@ -1,4 +1,4 @@
-package main
+package eureka
 
 import (
 	"context"
@@ -8,24 +8,26 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"my_app/api-gateway/internal/config"
 )
 
 // EurekaClient handles communication with Eureka service registry
-type EurekaClient struct {
+type Client struct {
 	baseURL string
 	client  *http.Client
 }
 
 // NewEurekaClient creates a new Eureka client
-func NewEurekaClient(baseURL string, timeout time.Duration) *EurekaClient {
-	return &EurekaClient{
+func NewEurekaClient(baseURL string, timeout time.Duration) *Client {
+	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		client:  &http.Client{Timeout: timeout},
 	}
 }
 
 // Register registers this service instance with Eureka
-func (e *EurekaClient) Register(ctx context.Context, cfg Config, ip string) error {
+func (e *Client) Register(ctx context.Context, cfg config.Config, ip string) error {
 	// Eureka Server accepts XML reliably.
 	// POST /eureka/apps/{APP}
 	registerURL := fmt.Sprintf("%s/apps/%s", e.baseURL, strings.ToUpper(cfg.AppName))
@@ -68,7 +70,7 @@ func (e *EurekaClient) Register(ctx context.Context, cfg Config, ip string) erro
 }
 
 // Heartbeat sends a heartbeat to Eureka to renew the lease
-func (e *EurekaClient) Heartbeat(ctx context.Context, cfg Config) error {
+func (e *Client) Heartbeat(ctx context.Context, cfg config.Config) error {
 	// PUT /eureka/apps/{APP}/{instanceId}
 	u := fmt.Sprintf("%s/apps/%s/%s", e.baseURL, strings.ToUpper(cfg.AppName), cfg.InstanceID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, nil)
@@ -104,7 +106,7 @@ type eurekaAppResponse struct {
 }
 
 // ResolveBaseURL resolves the base URL of a service from Eureka
-func (e *EurekaClient) ResolveBaseURL(ctx context.Context, appName string) (string, error) {
+func (e *Client) ResolveBaseURL(ctx context.Context, appName string) (string, error) {
 	u := fmt.Sprintf("%s/apps/%s", e.baseURL, strings.ToUpper(appName))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {

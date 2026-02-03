@@ -5,19 +5,25 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"my_app/api-gateway/internal/config"
+	"my_app/api-gateway/internal/eureka"
+	"my_app/api-gateway/internal/middleware"
+	"my_app/api-gateway/internal/proxy"
+	"my_app/api-gateway/internal/server"
 )
 
 func main() {
-	cfg := loadConfig()
+	cfg := config.Load()
 
-	httpClient := &http.Client{Timeout: cfg.RequestTimout}
-	eureka := NewEurekaClient(cfg.EurekaServerURL, cfg.RequestTimout)
-	ip := localIP()
+	httpClient := &http.Client{Timeout: cfg.RequestTimeout}
+	eurekaClient := eureka.NewEurekaClient(cfg.EurekaServerURL, cfg.RequestTimeout)
+	ip := config.LocalIP()
 
 	go func() {
 		for {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			err := eureka.Register(ctx, cfg, ip)
+			err := eurekaClient.Register(ctx, cfg, ip)
 			cancel()
 			if err == nil {
 				break
@@ -31,22 +37,21 @@ func main() {
 		defer t.Stop()
 		for range t.C {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := eureka.Heartbeat(ctx, cfg); err != nil {
+			if err := eurekaClient.Heartbeat(ctx, cfg); err != nil {
 				log.Printf("[eureka] heartbeat failed: %v", err)
 			}
 			cancel()
 		}
 	}()
 
-	proxy := NewProxyClient(httpClient)
-	rateLimiter := NewRateLimiter(100, 200) // 100 req/s, burst 200
+	proxyClient := proxy.New(httpClient)
+	rateLimiter := middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
 
-	mux := http.NewServeMux()
-	setupHandlers(mux, cfg, eureka, proxy, httpClient)
+	mux := server.NewMux(cfg, eurekaClient, proxyClient, httpClient)
 
 	// Chain middlewares: Logging -> RateLimit -> Mux
 	handler := rateLimiter.Middleware(mux)
-	handler = StructuredLoggingMiddleware(handler)
+	handler = middleware.StructuredLoggingMiddleware(handler)
 
 	addr := ":" + cfg.Port
 	log.Printf("api-gateway listening on %s (eureka=%s, flaskApp=%s)", addr, cfg.EurekaServerURL, cfg.FlaskAppName)

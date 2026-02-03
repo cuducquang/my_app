@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bytes"
@@ -8,10 +8,16 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"my_app/api-gateway/internal/config"
+	"my_app/api-gateway/internal/eureka"
+	"my_app/api-gateway/internal/proxy"
+	"my_app/api-gateway/internal/swagger"
 )
 
-// setupHandlers registers all HTTP handlers
-func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, proxy *ProxyClient, httpClient *http.Client) {
+// NewMux registers all HTTP handlers.
+func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client, httpClient *http.Client) *http.ServeMux {
+	mux := http.NewServeMux()
 	// Root path - show service info
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -39,9 +45,9 @@ func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, proxy *
 	// Circuit Breaker Status
 	mux.HandleFunc("/admin/circuit-breaker", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		counts := proxy.Counts()
+		counts := proxyClient.Counts()
 		status := map[string]interface{}{
-			"state": proxy.State().String(),
+			"state": proxyClient.State().String(),
 			"counts": map[string]interface{}{
 				"requests":              counts.Requests,
 				"total_successes":       counts.TotalSuccesses,
@@ -153,7 +159,7 @@ func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, proxy *
 	// Proxy endpoint for Flask's OpenAPI spec (to avoid CORS issues)
 	mux.HandleFunc("/api-docs/flask/openapi.json", func(w http.ResponseWriter, r *http.Request) {
 		base := cfg.FlaskBaseURL
-		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimout)
+		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
 		defer cancel()
 		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
 			base = u
@@ -192,13 +198,13 @@ func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, proxy *
 	// Swagger UI endpoint
 	mux.HandleFunc("/swagger-ui", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte(getSwaggerUIHTML()))
+		_, _ = w.Write([]byte(swagger.GetUIHTML()))
 	})
 
 	// Proxy: GET /flask -> Flask GET /
 	mux.HandleFunc("/flask", func(w http.ResponseWriter, r *http.Request) {
 		base := cfg.FlaskBaseURL
-		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimout)
+		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
 		defer cancel()
 		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
 			base = u
@@ -207,7 +213,7 @@ func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, proxy *
 			http.Error(w, "no flask base url (set FLASK_BASE_URL or register FLASK_APP_NAME in Eureka)", 500)
 			return
 		}
-		proxy.ProxyJSON(w, r, http.MethodGet, base+"/", nil)
+		proxyClient.ProxyJSON(w, r, http.MethodGet, base+"/", nil)
 	})
 
 	// Proxy: POST /flask/test-infrastructure -> Flask POST /test-infrastructure
@@ -217,7 +223,7 @@ func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, proxy *
 			return
 		}
 		base := cfg.FlaskBaseURL
-		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimout)
+		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
 		defer cancel()
 		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
 			base = u
@@ -231,6 +237,8 @@ func setupHandlers(mux *http.ServeMux, cfg Config, eureka *EurekaClient, proxy *
 		if len(bytes.TrimSpace(body)) == 0 {
 			body = []byte(`{}`)
 		}
-		proxy.ProxyJSON(w, r, http.MethodPost, base+"/test-infrastructure", body)
+		proxyClient.ProxyJSON(w, r, http.MethodPost, base+"/test-infrastructure", body)
 	})
+
+	return mux
 }
