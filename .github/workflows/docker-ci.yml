@@ -182,7 +182,7 @@ jobs:
     if: needs.detect-changes.outputs.chrome-mcp == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout
@@ -207,5 +207,20 @@ jobs:
             ${{ env.DOCKER_REPO }}:chrome-mcp-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Update chrome-mcp image tag for ArgoCD
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          sed -i "s#${{ env.DOCKER_REPO }}:chrome-mcp-[a-z0-9]\{7,40\}#${{ env.DOCKER_REPO }}:chrome-mcp-${{ github.sha }}#g" k8s/infra/chrome-mcp-deployment.yaml
+          sed -i "s#${{ env.DOCKER_REPO }}:chrome-mcp-latest#${{ env.DOCKER_REPO }}:chrome-mcp-${{ github.sha }}#g" k8s/infra/chrome-mcp-deployment.yaml
+          if git diff --quiet; then
+            echo "No manifest changes"
+            exit 0
+          fi
+          git add k8s/infra/chrome-mcp-deployment.yaml
+          git commit -m "chore: update chrome-mcp image tag [skip ci]"
+          git push
 
 
