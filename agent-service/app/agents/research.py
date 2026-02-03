@@ -92,13 +92,13 @@ class ResearchAgent(BaseAgent):
                 emit("agent_note", {"agent": self.name, "note": "Tool text is empty; cannot extract candidates."})
             return []
         prompt = (
-            "Extract 5-8 Vietnam travel destinations from the tool result. "
-            "Return JSON array with fields: name, region, min_days, max_days, "
+            "Extract 5-8 Vietnam travel DESTINATIONS (place names only). "
+            "Do NOT include verbs or UI tokens like: Could, Find, Use, StaticText, InlineTextBox, Upgrade. "
+            "Return ONLY a JSON array with fields: name, region, min_days, max_days, "
             "base_cost_per_day (USD), best_for (array), tags (array). "
             f"User context: {json.dumps(normalized, ensure_ascii=True)}. "
             f"Tool titles: {json.dumps(titles, ensure_ascii=True)[:1200]}\n"
-            f"Tool results: {json.dumps(tool_results, ensure_ascii=True)[:4000]}\n"
-            f"Tool text: {tool_text[:3000]}"
+            f"Tool text: {tool_text[:2000]}"
         )
         if relaxed:
             prompt = (
@@ -124,7 +124,10 @@ class ResearchAgent(BaseAgent):
             return self._candidates_from_titles(titles, normalized) or self._heuristic_candidates(tool_text, normalized)
         data = self._safe_json_parse(response)
         if isinstance(data, list):
-            return [self._normalize_candidate(item) for item in data if isinstance(item, dict) and item.get("name")]
+            candidates = [self._normalize_candidate(item) for item in data if isinstance(item, dict) and item.get("name")]
+            candidates = [c for c in candidates if not self._is_bad_name(c.get("name", ""))]
+            if candidates:
+                return candidates
         if callable(emit):
             emit(
                 "agent_note",
@@ -162,6 +165,31 @@ class ResearchAgent(BaseAgent):
             "tags": item.get("tags", []),
         }
 
+    def _is_bad_name(self, name: str) -> bool:
+        bad = {
+            "could",
+            "find",
+            "use",
+            "upgrade",
+            "statictext",
+            "inlinetextbox",
+            "rootwebarea",
+            "duckduckgo",
+            "google",
+            "bing",
+            "search",
+            "latest",
+            "protection",
+        }
+        cleaned = name.strip()
+        if not cleaned:
+            return True
+        if any(char.isdigit() for char in cleaned):
+            return True
+        if cleaned.lower() in bad:
+            return True
+        return False
+
     def _heuristic_candidates(self, text: str, normalized: Dict) -> List[Dict]:
         if not text:
             return []
@@ -189,6 +217,13 @@ class ResearchAgent(BaseAgent):
             "Search",
             "Latest",
             "RootWebArea",
+            "Could",
+            "Find",
+            "Use",
+            "Upgrade",
+            "StaticText",
+            "InlineTextBox",
+            "Protection",
         }
         seen = set()
         names = []
@@ -198,6 +233,8 @@ class ResearchAgent(BaseAgent):
                 continue
             lowered = name.lower()
             if any(word in lowered for word in ["duckduckgo", "google", "bing", "search"]):
+                continue
+            if self._is_bad_name(name):
                 continue
             if any(char.isdigit() for char in name):
                 continue
