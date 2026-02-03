@@ -26,6 +26,21 @@ spec:
         ports:
         - containerPort: 5000
         env:
+        - name: AGENT1
+          valueFrom:
+            secretKeyRef:
+              name: agent-service-secrets
+              key: AGENT1
+        - name: AGENT2
+          valueFrom:
+            secretKeyRef:
+              name: agent-service-secrets
+              key: AGENT2
+        - name: AGENT3
+          valueFrom:
+            secretKeyRef:
+              name: agent-service-secrets
+              key: AGENT3
         - name: CHROMA_HOST
           value: "chromadb-service"
         - name: CHROMA_PORT
@@ -37,7 +52,7 @@ spec:
         - name: CHROME_MCP_URL
           value: "http://chrome-mcp:8000"
         - name: CHROME_MCP_TOOL
-          value: "browser.navigate"
+          value: "new_page"
 ---
 apiVersion: v1
 kind: Service
