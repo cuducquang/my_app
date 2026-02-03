@@ -267,12 +267,43 @@ class ResearchAgent(BaseAgent):
 
     def _candidates_from_titles(self, titles: List[str], normalized: Dict) -> List[Dict]:
         cleaned: List[str] = []
+        stopwords = {
+            "could",
+            "find",
+            "use",
+            "recommend",
+            "travel",
+            "trip",
+            "trips",
+            "guide",
+            "best",
+            "top",
+            "places",
+            "destinations",
+            "things",
+            "family",
+            "beach",
+            "food",
+            "vietnam",
+            "here",
+            "you",
+            "your",
+            "for",
+            "with",
+            "from",
+            "in",
+            "to",
+        }
         for title in titles:
             base = re.split(r"\s-\s|\s\|\s|\s\(\d{4}\)\s", title)[0]
             base = re.sub(r"\b(in|at|for)\s+Vietnam\b", "", base, flags=re.IGNORECASE).strip()
             base = re.sub(r"\b(Vietnam|Travel|Trip|Guide|Best|Top|Places|Destinations)\b", "", base, flags=re.IGNORECASE).strip()
             base = re.sub(r"\s{2,}", " ", base)
             if len(base) < 4 or any(char.isdigit() for char in base):
+                continue
+            if base.lower() in stopwords:
+                continue
+            if " " not in base and not any(ch in base for ch in "ăâđêôơưáàảãạéèẻẽẹíìỉĩịóòỏõọúùủũụýỳỷỹỵ"):
                 continue
             cleaned.append(base)
             if len(cleaned) >= 8:

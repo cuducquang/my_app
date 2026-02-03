@@ -31,16 +31,34 @@ spec:
             secretKeyRef:
               name: agent-service-secrets
               key: AGENT1
+        - name: AGENT1_PROVIDER
+          value: "gemini"
+        - name: AGENT1_BASE_URL
+          value: "https://generativelanguage.googleapis.com/v1beta"
+        - name: AGENT1_MODEL
+          value: "gemini-2.5-flash"
         - name: AGENT2
           valueFrom:
             secretKeyRef:
               name: agent-service-secrets
               key: AGENT2
+        - name: AGENT2_PROVIDER
+          value: "gemini"
+        - name: AGENT2_BASE_URL
+          value: "https://generativelanguage.googleapis.com/v1beta"
+        - name: AGENT2_MODEL
+          value: "gemini-2.0-flash"
         - name: AGENT3
           valueFrom:
             secretKeyRef:
               name: agent-service-secrets
               key: AGENT3
+        - name: AGENT3_PROVIDER
+          value: "gemini"
+        - name: AGENT3_BASE_URL
+          value: "https://generativelanguage.googleapis.com/v1beta"
+        - name: AGENT3_MODEL
+          value: "gemini-2.5-flash"
         - name: CHROMA_HOST
           value: "chromadb-service"
         - name: CHROMA_PORT
