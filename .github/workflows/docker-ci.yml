@@ -8,7 +8,7 @@ on:
       # Trigger on changes to any service or shared files
       - 'api-gateway/**'
       - 'discovery-server/**'
-      - 'test/**'
+      - 'agent-service/**'
       - 'front-end/**'
       - '.github/workflows/docker-ci.yml'
 
@@ -22,7 +22,7 @@ jobs:
     outputs:
       api-gateway: ${{ steps.filter.outputs.api-gateway }}
       discovery-server: ${{ steps.filter.outputs.discovery-server }}
-      flask-api: ${{ steps.filter.outputs.flask-api }}
+      agent-service: ${{ steps.filter.outputs.agent-service }}
       front-end: ${{ steps.filter.outputs.front-end }}
     steps:
       - name: Checkout
@@ -39,8 +39,8 @@ jobs:
               - 'api-gateway/**'
             discovery-server:
               - 'discovery-server/**'
-            flask-api:
-              - 'test/**'
+            agent-service:
+              - 'agent-service/**'
             front-end:
               - 'front-end/**'
 
@@ -108,10 +108,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Build and push Flask API
-  build-flask-api:
+  # Build and push Agent Service
+  build-agent-service:
     needs: detect-changes
-    if: needs.detect-changes.outputs.flask-api == 'true'
+    if: needs.detect-changes.outputs.agent-service == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -129,14 +129,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push flask-api image
+      - name: Build and push agent-service image
         uses: docker/build-push-action@v6
         with:
-          context: ./test
+          context: ./agent-service
           push: true
           tags: |
-            ${{ env.DOCKER_REPO }}:flask-api-latest
-            ${{ env.DOCKER_REPO }}:flask-api-${{ github.sha }}
+            ${{ env.DOCKER_REPO }}:agent-service-latest
+            ${{ env.DOCKER_REPO }}:agent-service-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
