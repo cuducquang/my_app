@@ -17,8 +17,6 @@ from app.tools.registry import ToolRegistry
 from app.utils.formatting import format_recommendations_text
 from app.utils.logging import REQUEST_ID_HEADER, get_logger
 from app.clients.mcp import MCPClient
-from app.data.destinations import DESTINATIONS
-from app.utils.estimation import estimate_trip_cost
 
 
 CONFIG = load_config()
@@ -59,18 +57,6 @@ def create_app() -> Flask:
         return jsonify({"error": "internal_error", "request_id": g.request_id}), 500
 
     registry = ToolRegistry()
-    registry.register_simple(
-        name="destination_catalog",
-        description="Return internal destination dataset",
-        schema={},
-        handler=lambda: DESTINATIONS,
-    )
-    registry.register_simple(
-        name="estimate_trip_cost",
-        description="Estimate trip cost for a destination",
-        schema={"days": "int", "people": "int", "base_cost_per_day": "number", "group_type": "string"},
-        handler=estimate_trip_cost,
-    )
     def chrome_mcp_browse(url: str, instructions: str = "") -> Dict[str, Any]:
         if not CONFIG.chrome_mcp_url:
             return {"status": "not_configured", "message": "CHROME_MCP_URL is not set", "url": url}

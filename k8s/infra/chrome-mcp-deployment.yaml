@@ -14,13 +14,15 @@ spec:
     spec:
       containers:
         - name: chrome-mcp
-          image: ghcr.io/modelcontextprotocol/servers/chrome:latest
+          image: cdquang/my-app:chrome-mcp-latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
           env:
             - name: MCP_PORT
               value: "8000"
+            - name: CHROME_MCP_ARGS
+              value: "--headless=true --isolated=true"
           resources:
             requests:
               cpu: "200m"

@@ -1,0 +1,15 @@
+{
+  "name": "mcp-chrome-http-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HTTP JSON-RPC bridge for chrome-devtools-mcp",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "chrome-devtools-mcp": "^0.15.1",
+    "express": "^4.19.2"
+  }
+}
+
