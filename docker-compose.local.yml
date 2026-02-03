@@ -59,6 +59,7 @@ services:
       - EUREKA_SERVER_URL=http://discovery-server:8761/eureka
       - FLASK_APP_NAME=FLASK-SERVICE
       - FLASK_BASE_URL=http://flask-service:5000
+      - REQUEST_TIMEOUT=120s
       - PREFER_IP=true
     depends_on:
       discovery-server:

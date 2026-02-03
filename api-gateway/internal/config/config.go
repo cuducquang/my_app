@@ -100,6 +100,6 @@ func Load() Config {
 		PreferIP:        strings.ToLower(getenv("PREFER_IP", "true")) == "true",
 		FlaskAppName:    getenv("FLASK_APP_NAME", "FLASK-SERVICE"),
 		FlaskBaseURL:    strings.TrimRight(getenv("FLASK_BASE_URL", ""), "/"),
-		RequestTimeout:  mustParseDuration(getenv("REQUEST_TIMEOUT", "10s"), 10*time.Second),
+		RequestTimeout:  mustParseDuration(getenv("REQUEST_TIMEOUT", "120s"), 120*time.Second),
 	}
 }

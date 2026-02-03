@@ -1,6 +1,4 @@
 flask
 flask-cors
-chromadb
-requests
 flasgger
-mlflow
+requests

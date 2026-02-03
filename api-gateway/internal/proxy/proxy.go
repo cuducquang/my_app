@@ -95,6 +95,46 @@ func (p *Client) ProxyJSON(w http.ResponseWriter, r *http.Request, method, url s
 	_, _ = io.Copy(w, resp.Body)
 }
 
+// ProxyStream proxies a request and streams the response body to the client.
+func (p *Client) ProxyStream(w http.ResponseWriter, r *http.Request, method, url string, body []byte) {
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequest(method, url, bodyReader)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	req = req.WithContext(r.Context())
+	req.Header.Set("Accept", "text/event-stream")
+	if method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, v := range resp.Header {
+		if k != "Content-Length" {
+			w.Header()[k] = v
+		}
+	}
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(resp.StatusCode)
+
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	_, _ = io.Copy(w, resp.Body)
+}
+
 // State returns the current state of the circuit breaker
 func (p *Client) State() gobreaker.State {
 	return p.cb.State()

@@ -1,0 +1,48 @@
+DESTINATIONS = [
+    {
+        "name": "Da Nang",
+        "region": "central",
+        "min_days": 3,
+        "max_days": 5,
+        "base_cost_per_day": 40,
+        "best_for": ["family", "group", "couple"],
+        "tags": ["beach", "food", "easy_travel"],
+    },
+    {
+        "name": "Da Lat",
+        "region": "south",
+        "min_days": 2,
+        "max_days": 4,
+        "base_cost_per_day": 30,
+        "best_for": ["couple", "family", "group"],
+        "tags": ["nature", "cool_weather", "coffee"],
+    },
+    {
+        "name": "Ha Long",
+        "region": "north",
+        "min_days": 2,
+        "max_days": 4,
+        "base_cost_per_day": 45,
+        "best_for": ["family", "group"],
+        "tags": ["cruise", "nature", "scenic"],
+    },
+    {
+        "name": "Phu Quoc",
+        "region": "south",
+        "min_days": 3,
+        "max_days": 6,
+        "base_cost_per_day": 60,
+        "best_for": ["family", "couple"],
+        "tags": ["beach", "relax", "seafood"],
+    },
+    {
+        "name": "Ninh Binh",
+        "region": "north",
+        "min_days": 2,
+        "max_days": 3,
+        "base_cost_per_day": 25,
+        "best_for": ["solo", "couple", "group"],
+        "tags": ["nature", "culture", "short_trip"],
+    },
+]
+

@@ -36,6 +36,10 @@ spec:
           value: "http://discovery-server:8761"
         - name: EUREKA_APP_NAME
           value: "FLASK-SERVICE"
+        - name: CHROME_MCP_URL
+          value: "http://chrome-mcp:8000"
+        - name: CHROME_MCP_TOOL
+          value: "browser.navigate"
 ---
 apiVersion: v1
 kind: Service

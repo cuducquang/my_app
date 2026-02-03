@@ -37,6 +37,8 @@ spec:
               value: "FLASK-SERVICE"
             - name: FLASK_BASE_URL
               value: "http://flask-service"
+            - name: REQUEST_TIMEOUT
+              value: "120s"
           resources:
             requests:
               cpu: "100m"

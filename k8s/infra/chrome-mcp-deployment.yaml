@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chrome-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chrome-mcp
+  template:
+    metadata:
+      labels:
+        app: chrome-mcp
+    spec:
+      containers:
+        - name: chrome-mcp
+          image: ghcr.io/modelcontextprotocol/servers/chrome:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MCP_PORT
+              value: "8000"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chrome-mcp
+spec:
+  selector:
+    app: chrome-mcp
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+

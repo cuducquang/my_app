@@ -216,6 +216,52 @@ func NewMux(cfg config.Config, eureka *eureka.Client, proxyClient *proxy.Client,
 		proxyClient.ProxyJSON(w, r, http.MethodGet, base+"/", nil)
 	})
 
+	// Proxy: POST /agent -> Agent-service POST /recommendations
+	mux.HandleFunc("/agent", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		base := cfg.FlaskBaseURL
+		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
+		defer cancel()
+		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
+			base = u
+		}
+		if base == "" {
+			http.Error(w, "no agent service base url", 500)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		if len(bytes.TrimSpace(body)) == 0 {
+			body = []byte(`{}`)
+		}
+		proxyClient.ProxyJSON(w, r, http.MethodPost, base+"/recommendations", body)
+	})
+
+	// Proxy: POST /agent/stream -> Agent-service POST /recommendations/stream
+	mux.HandleFunc("/agent/stream", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		base := cfg.FlaskBaseURL
+		ctx, cancel := context.WithTimeout(r.Context(), cfg.RequestTimeout)
+		defer cancel()
+		if u, err := eureka.ResolveBaseURL(ctx, cfg.FlaskAppName); err == nil {
+			base = u
+		}
+		if base == "" {
+			http.Error(w, "no agent service base url", 500)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		if len(bytes.TrimSpace(body)) == 0 {
+			body = []byte(`{}`)
+		}
+		proxyClient.ProxyStream(w, r, http.MethodPost, base+"/recommendations/stream", body)
+	})
+
 	// Proxy: POST /flask/test-infrastructure -> Flask POST /test-infrastructure
 	mux.HandleFunc("/flask/test-infrastructure", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
