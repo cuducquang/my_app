@@ -15,7 +15,7 @@ spec:
       containers:
         - name: chrome-mcp
           image: cdquang/my-app:chrome-mcp-latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           env:

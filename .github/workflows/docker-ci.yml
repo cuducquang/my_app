@@ -213,13 +213,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          sed -i "s#${{ env.DOCKER_REPO }}:chrome-mcp-[a-z0-9]\{7,40\}#${{ env.DOCKER_REPO }}:chrome-mcp-${{ github.sha }}#g" k8s/infra/chrome-mcp-deployment.yaml
-          sed -i "s#${{ env.DOCKER_REPO }}:chrome-mcp-latest#${{ env.DOCKER_REPO }}:chrome-mcp-${{ github.sha }}#g" k8s/infra/chrome-mcp-deployment.yaml
+          sed -i "s#${{ env.DOCKER_REPO }}:chrome-mcp-[a-z0-9]\{7,40\}#${{ env.DOCKER_REPO }}:chrome-mcp-${{ github.sha }}#g" k8s/apps/chrome-mcp.yaml
+          sed -i "s#${{ env.DOCKER_REPO }}:chrome-mcp-latest#${{ env.DOCKER_REPO }}:chrome-mcp-${{ github.sha }}#g" k8s/apps/chrome-mcp.yaml
           if git diff --quiet; then
             echo "No manifest changes"
             exit 0
           fi
-          git add k8s/infra/chrome-mcp-deployment.yaml
+          git add k8s/apps/chrome-mcp.yaml
           git commit -m "chore: update chrome-mcp image tag [skip ci]"
           git push
 
