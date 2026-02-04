@@ -10,12 +10,28 @@ logger = get_logger()
 
 
 class LLMClient:
-    def __init__(self, name: str, provider: str, api_key: str, base_url: str, model: str):
+    def __init__(
+        self,
+        name: str,
+        provider: str,
+        api_key: str,
+        base_url: str,
+        model: str,
+        timeout: int = 20,
+    ):
         self.name = name
         self.provider = provider.lower()
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.timeout = timeout
+
+    def _allows_empty_key(self) -> bool:
+        if self.provider not in ("openai", "openrouter"):
+            return False
+        return self.base_url.startswith(
+            ("http://localhost", "http://127.0.0.1", "http://host.docker.internal")
+        )
 
     def _flatten_messages(self, messages: List[Dict[str, str]]) -> Tuple[str, List[Dict[str, str]]]:
         system_parts = [m["content"] for m in messages if m.get("role") == "system"]
@@ -25,12 +41,14 @@ class LLMClient:
 
     def _chat_openai_compatible(self, messages: List[Dict[str, str]], temperature: float) -> Optional[str]:
         payload = {"model": self.model, "messages": messages, "temperature": temperature}
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         res = requests.post(
             f"{self.base_url}/chat/completions",
             headers=headers,
             data=json.dumps(payload),
-            timeout=20,
+            timeout=self.timeout,
         )
         if res.status_code >= 400:
             logger.warning("[%s] LLM error: %s %s", self.name, res.status_code, res.text)
@@ -52,7 +70,7 @@ class LLMClient:
             "generationConfig": {"temperature": temperature},
         }
         endpoint = f"{self.base_url}/models/{self.model}:generateContent?key={self.api_key}"
-        res = requests.post(endpoint, json=payload, timeout=20)
+        res = requests.post(endpoint, json=payload, timeout=self.timeout)
         if res.status_code >= 400:
             logger.warning("[%s] Gemini error: %s %s", self.name, res.status_code, res.text)
             return None
@@ -78,7 +96,7 @@ class LLMClient:
             f"{self.base_url}/messages",
             headers=headers,
             data=json.dumps(payload),
-            timeout=20,
+            timeout=self.timeout,
         )
         if res.status_code >= 400:
             logger.warning("[%s] Claude error: %s %s", self.name, res.status_code, res.text)
@@ -87,7 +105,7 @@ class LLMClient:
         return data["content"][0]["text"]
 
     def chat(self, messages: List[Dict[str, str]], temperature: float = 0.2) -> Optional[str]:
-        if not self.api_key:
+        if not self.api_key and not self._allows_empty_key():
             return None
         try:
             if self.provider in ("openai", "openrouter"):

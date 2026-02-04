@@ -1,7 +1,6 @@
 import os
 import socket
 from dataclasses import dataclass
-from typing import Dict
 
 
 def getenv(key: str, default: str = "") -> str:
@@ -32,12 +31,12 @@ class AppConfig:
     eureka_app_name: str
     eureka_instance_id: str
     prefer_ip: bool
+    llm_timeout: int
     chrome_mcp_url: str
-    chrome_mcp_tool: str
-    agent_keys: Dict[str, str]
-    agent_base_urls: Dict[str, str]
-    agent_models: Dict[str, str]
-    agent_providers: Dict[str, str]
+    llm_provider: str
+    llm_base_url: str
+    llm_model: str
+    llm_api_key: str
 
 
 def load_config() -> AppConfig:
@@ -47,29 +46,12 @@ def load_config() -> AppConfig:
     eureka_app_name = getenv("EUREKA_APP_NAME", "AGENT-SERVICE")
     instance_id = getenv("EUREKA_INSTANCE_ID", f"{eureka_app_name.lower()}:{local_ip()}:{port}")
     prefer_ip = getenv("PREFER_IP", "true").lower() == "true"
+    llm_timeout = int(getenv("LLM_TIMEOUT", "20"))
     chrome_mcp_url = getenv("CHROME_MCP_URL", "http://localhost:8000/mcp")
-    chrome_mcp_tool = getenv("CHROME_MCP_TOOL", "browser.navigate")
-
-    agent_keys = {
-        "agent1": getenv("AGENT1", ""),
-        "agent2": getenv("AGENT2", ""),
-        "agent3": getenv("AGENT3", ""),
-    }
-    agent_base_urls = {
-        "agent1": getenv("AGENT1_BASE_URL", ""),
-        "agent2": getenv("AGENT2_BASE_URL", ""),
-        "agent3": getenv("AGENT3_BASE_URL", ""),
-    }
-    agent_models = {
-        "agent1": getenv("AGENT1_MODEL", ""),
-        "agent2": getenv("AGENT2_MODEL", ""),
-        "agent3": getenv("AGENT3_MODEL", ""),
-    }
-    agent_providers = {
-        "agent1": getenv("AGENT1_PROVIDER", ""),
-        "agent2": getenv("AGENT2_PROVIDER", ""),
-        "agent3": getenv("AGENT3_PROVIDER", ""),
-    }
+    llm_provider = getenv("LLM_PROVIDER", "gemini")
+    llm_base_url = getenv("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+    llm_model = getenv("LLM_MODEL", "gemini-2.5-flash")
+    llm_api_key = getenv("LLM_API_KEY", "")
 
     return AppConfig(
         port=port,
@@ -77,11 +59,11 @@ def load_config() -> AppConfig:
         eureka_app_name=eureka_app_name,
         eureka_instance_id=instance_id,
         prefer_ip=prefer_ip,
+        llm_timeout=llm_timeout,
         chrome_mcp_url=chrome_mcp_url,
-        chrome_mcp_tool=chrome_mcp_tool,
-        agent_keys=agent_keys,
-        agent_base_urls=agent_base_urls,
-        agent_models=agent_models,
-        agent_providers=agent_providers,
+        llm_provider=llm_provider,
+        llm_base_url=llm_base_url,
+        llm_model=llm_model,
+        llm_api_key=llm_api_key,
     )
 

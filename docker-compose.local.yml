@@ -30,11 +30,19 @@ services:
       - EUREKA_SERVER_URL=http://discovery-server:8761
       - EUREKA_APP_NAME=AGENT-SERVICE
       - PREFER_IP=true
+      - CHROME_MCP_URL=http://chrome-mcp:8000/mcp
+      - LLM_TIMEOUT=300
+      - LLM_API_KEY
+      - LLM_PROVIDER=openai
+      - LLM_BASE_URL=http://host.docker.internal:1234/v1
+      - LLM_MODEL=zai-org/glm-4.7-flash
     depends_on:
       discovery-server:
         condition: service_healthy
+      chrome-mcp:
+        condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -70,34 +78,19 @@ services:
     networks:
       - mlops-network
 
-  # Optional: ChromaDB (if you want to test infrastructure endpoints)
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: chromadb-local
+  # MCP Chrome Server
+  chrome-mcp:
+    build:
+      context: ./mcp-chrome
+      dockerfile: Dockerfile
+    container_name: chrome-mcp-local
     ports:
       - "8000:8000"
     environment:
-      - IS_PERSISTENT=TRUE
-      - PERSIST_DIRECTORY=/chroma/chroma
-    volumes:
-      - chromadb-data:/chroma/chroma
+      - PORT=8000
+      - CHROME_MCP_ARGS=--headless=true --isolated=true
     networks:
       - mlops-network
-    profiles:
-      - infrastructure  # Only start with --profile infrastructure
-
-  # Optional: WandB (if you want to test infrastructure endpoints)
-  wandb-service:
-    image: wandb/local:latest
-    container_name: wandb-local
-    ports:
-      - "8081:8080"
-    environment:
-      - WANDB_BASE_URL=http://localhost:8081
-    networks:
-      - mlops-network
-    profiles:
-      - infrastructure  # Only start with --profile infrastructure
 
   # Frontend Service (Next.js)
   front-end:
@@ -120,6 +113,5 @@ networks:
   mlops-network:
     driver: bridge
 
-volumes:
-  chromadb-data:
+volumes: {}
 

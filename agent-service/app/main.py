@@ -12,7 +12,6 @@ from werkzeug.exceptions import HTTPException
 from app.config import load_config
 from app.orchestrator import Orchestrator
 from app.services.eureka import eureka_register
-from app.tools.plugins import load_skill_plugins
 from app.tools.registry import ToolRegistry
 from app.utils.formatting import format_recommendations_text
 from app.utils.logging import REQUEST_ID_HEADER, get_logger
@@ -40,7 +39,7 @@ def create_app() -> Flask:
         template={
             "info": {
                 "title": "Agent Service API",
-                "description": "Multi-agent trip recommendation service",
+            "description": "Single-agent trip recommendation service",
                 "version": "2.0.0",
             },
             "basePath": "/",
@@ -69,24 +68,17 @@ def create_app() -> Flask:
         if not CONFIG.chrome_mcp_url:
             return {"status": "not_configured", "message": "CHROME_MCP_URL is not set", "url": url}
         client = MCPClient(CONFIG.chrome_mcp_url)
-        page = client.call_tool("new_page", {"url": url})
-        page_result = page.get("result") if isinstance(page, dict) else {}
-        page_id = page_result.get("pageId") if isinstance(page_result, dict) else None
-        if page_id is not None:
-            client.call_tool("select_page", {"pageId": page_id, "bringToFront": False})
-            client.call_tool("wait_for", {"text": "Vietnam", "timeout": 8000})
+        client.call_tool("new_page", {"url": url})
 
         eval_result = client.call_tool(
             "evaluate_script",
             {
                 "function": """() => {
   const titles = Array.from(document.querySelectorAll('h3')).map((el) => el.innerText).filter(Boolean);
-  const anchors = Array.from(document.querySelectorAll('a')).map((el) => el.innerText).filter(Boolean);
   const bodyText = document.body && document.body.innerText ? document.body.innerText : '';
   return {
-    titles: titles.slice(0, 15),
-    anchors: anchors.slice(0, 20),
-    bodyText: bodyText.slice(0, 20000),
+    titles: titles.slice(0, 10),
+    bodyText: bodyText.slice(0, 6000),
   };
 }""",
             },
@@ -100,19 +92,10 @@ def create_app() -> Flask:
             eval_text = str(eval_payload.get("bodyText") or "")
             eval_titles = eval_payload.get("titles") or []
 
-        snapshot = client.call_tool("take_snapshot", {"verbose": True})
-        snapshot_result = snapshot.get("result") if isinstance(snapshot, dict) else snapshot
-        snapshot_text = ""
-        if isinstance(snapshot_result, dict):
-            snapshot_text = str(snapshot_result.get("content") or snapshot_result.get("snapshot") or "")
         return {
             "status": "ok",
-            "page": page,
             "eval_text": eval_text,
             "eval_titles": eval_titles,
-            "snapshot": snapshot,
-            "snapshot_text": snapshot_text,
-            "instructions": instructions,
         }
 
     registry.register_simple(
@@ -122,21 +105,17 @@ def create_app() -> Flask:
         handler=chrome_mcp_browse,
     )
 
-    skills_dir = "app/skills"
-    loaded_skills = load_skill_plugins(registry, skills_dir)
     orchestrator = Orchestrator(CONFIG, registry)
 
     logger.info(
-        "agent-service config providers: agent1=%s agent2=%s agent3=%s",
-        CONFIG.agent_providers.get("agent1"),
-        CONFIG.agent_providers.get("agent2"),
-        CONFIG.agent_providers.get("agent3"),
+        "agent-service config: provider=%s model=%s base=%s",
+        CONFIG.llm_provider,
+        CONFIG.llm_model,
+        CONFIG.llm_base_url,
     )
     logger.info(
-        "agent-service api keys: agent1=%s agent2=%s agent3=%s",
-        mask_key(CONFIG.agent_keys.get("agent1", "")),
-        mask_key(CONFIG.agent_keys.get("agent2", "")),
-        mask_key(CONFIG.agent_keys.get("agent3", "")),
+        "agent-service api key: %s",
+        mask_key(CONFIG.llm_api_key),
     )
 
     @app.route("/")
@@ -145,8 +124,7 @@ def create_app() -> Flask:
             {
                 "service": "agent-service",
                 "status": "running",
-                "endpoints": ["/health", "/recommendations", "/plan", "/openapi.json"],
-                "skills_loaded": loaded_skills,
+                "endpoints": ["/health", "/recommendations", "/openapi.json"],
             }
         )
 
@@ -193,7 +171,13 @@ def create_app() -> Flask:
             return jsonify({"error": "payload must be a JSON object"}), 400
         result = orchestrator.run(payload)
         result["answer"] = format_recommendations_text(result)
-        return jsonify(result)
+        return jsonify(
+            {
+                "trace_id": result.get("trace_id"),
+                "answer": result.get("answer"),
+                "duration_ms": result.get("duration_ms"),
+            }
+        )
 
     def stream_recommendations(payload: Dict[str, Any]):
         q: "queue.Queue[Dict[str, Any]]" = queue.Queue()
@@ -206,10 +190,20 @@ def create_app() -> Flask:
                 result = orchestrator.run_with_stream(payload, emit)
                 message = format_recommendations_text(result)
                 result["answer"] = message
-                for token in message.split():
-                    emit("token", {"text": token + " "})
+                words = message.split()
+                chunk_size = 6
+                for i in range(0, len(words), chunk_size):
+                    chunk = " ".join(words[i : i + chunk_size]) + " "
+                    emit("token", {"text": chunk})
                     time.sleep(0.02)
-                emit("final", result)
+                emit(
+                    "final",
+                    {
+                        "trace_id": result.get("trace_id"),
+                        "answer": result.get("answer"),
+                        "duration_ms": result.get("duration_ms"),
+                    },
+                )
             except Exception as exc:
                 emit("error", {"message": str(exc)})
             finally:
@@ -242,15 +236,6 @@ def create_app() -> Flask:
             },
         )
 
-    @app.route("/plan", methods=["POST"])
-    def plan() -> Any:
-        payload = request.get_json(silent=True)
-        if payload is None:
-            payload = {}
-        if not isinstance(payload, dict):
-            return jsonify({"error": "payload must be a JSON object"}), 400
-        result = orchestrator.run(payload)
-        return jsonify(result)
 
     @app.route("/openapi.json")
     def openapi_spec() -> Any:

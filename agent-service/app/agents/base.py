@@ -11,16 +11,3 @@ class BaseAgent:
     def run(self, context: Dict) -> Dict:
         raise NotImplementedError
 
-    def _add_llm_note(self, context: Dict, prompt: str) -> None:
-        response = self.llm.chat(
-            [
-                {"role": "system", "content": "You are a travel assistant."},
-                {"role": "user", "content": prompt},
-            ]
-        )
-        if response:
-            context.setdefault("llm_notes", []).append({"agent": self.name, "note": response})
-            emit = context.get("emit")
-            if callable(emit):
-                emit("agent_note", {"agent": self.name, "note": response})
-

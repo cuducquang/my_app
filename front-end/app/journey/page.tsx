@@ -18,33 +18,9 @@ type ChatMessage = {
 
 type AgentResponse = {
   answer?: string;
-  recommendations?: Array<{
-    destination: string;
-    region: string;
-    estimated_cost: number;
-    tags: string[];
-    notes: string[];
-  }>;
-  llm_notes?: Array<{ agent: string; note: string }>;
-  workflow?: Array<{ agent: string; duration_ms: number }>;
 };
 
-const defaultAgents = ["intake", "research", "recommend"];
-
-function formatResponse(result: AgentResponse): string {
-  const direct = result.answer;
-  if (direct && direct.trim().length > 0) {
-    return direct;
-  }
-  if (!result.recommendations?.length) {
-    return "Mình chưa tìm được gợi ý phù hợp. Bạn thử tăng ngân sách hoặc số ngày nhé.";
-  }
-  const lines = result.recommendations.map((item, index) => {
-    const tags = item.tags?.length ? `Tags: ${item.tags.join(", ")}` : "";
-    return `${index + 1}. ${item.destination} (${item.region}) - Ước tính: $${item.estimated_cost}. ${tags}`;
-  });
-  return `Mình gợi ý các điểm sau:\n${lines.join("\n")}`;
-}
+const defaultAgents = ["agent"];
 
 export default function JourneyPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -54,7 +30,6 @@ export default function JourneyPage() {
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(
     defaultAgents.map((name) => ({ name, state: "idle" }))
   );
-  const [agentNotes, setAgentNotes] = useState<Record<string, string>>({});
   const [toolCalls, setToolCalls] = useState<string[]>([]);
   const [formState, setFormState] = useState({
     days: "3",
@@ -82,7 +57,6 @@ export default function JourneyPage() {
     setMessages((prev) => [...prev, message]);
     setInput("");
     setIsLoading(true);
-    setAgentNotes({});
     setToolCalls([]);
     setAgentStatuses((prev) =>
       prev.map((agent, index) => ({
@@ -167,7 +141,7 @@ export default function JourneyPage() {
           const duration =
             typeof data.duration_ms === "number" ? data.duration_ms : undefined;
           const toolName = typeof data.tool === "string" ? data.tool : undefined;
-          const noteText = typeof data.note === "string" ? data.note : undefined;
+          const toolSource = typeof data.source === "string" ? data.source : undefined;
 
           if (eventName === "token" && text) {
             updateAssistant(text);
@@ -192,15 +166,14 @@ export default function JourneyPage() {
           }
 
           if (eventName === "tool_call" && toolName) {
-            setToolCalls((prev) => [...prev, toolName]);
-          }
-
-          if (eventName === "agent_note" && agentName && noteText) {
-            setAgentNotes((prev) => ({ ...prev, [agentName]: noteText }));
+            const label = toolSource ? `${toolName} · ${toolSource}` : toolName;
+            setToolCalls((prev) => [...prev, label]);
           }
 
           if (eventName === "final") {
-            const formatted = formatResponse(data as AgentResponse);
+            const formatted =
+              (data as AgentResponse)?.answer?.trim() ||
+              "Mình chưa tìm được gợi ý phù hợp. Bạn thử tăng ngân sách hoặc bổ sung thêm sở thích nhé.";
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === streamingMessageId.current ? { ...msg, content: formatted } : msg
@@ -322,21 +295,6 @@ export default function JourneyPage() {
             </div>
           </div>
 
-          {Object.keys(agentNotes).length > 0 && (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 text-sm">
-              <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-                Agent Reasoning
-              </p>
-              <div className="mt-3 space-y-3">
-                {Object.entries(agentNotes).map(([agent, note]) => (
-                  <div key={agent} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                    <p className="text-xs uppercase text-zinc-500">{agent}</p>
-                    <p className="mt-2 text-sm text-zinc-200">{note}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </aside>
 
         <section className="flex w-full flex-1 flex-col rounded-3xl border border-zinc-800 bg-zinc-900/40 p-4">
@@ -367,7 +325,7 @@ export default function JourneyPage() {
             {isLoading && (
               <div className="flex items-center gap-2 text-sm text-zinc-400">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                Agents are thinking...
+                Agent is thinking...
               </div>
             )}
           </div>
